@@ -13,7 +13,6 @@ active status:
 The LLM can draft answers; the human decides.
 """
 
-import shutil
 from pathlib import Path
 
 from adzekit.config import MAX_ACTIVE_PROJECTS, MAX_DAILY_TASKS, Settings, get_settings
@@ -63,32 +62,32 @@ def activate_project(project_slug: str, settings: Settings | None = None) -> Pat
     """Move a project from backlog/ to active/.
 
     Raises ValueError if the WIP limit would be exceeded.
-    Returns the new project directory path.
+    Returns the new project file path.
     """
     settings = settings or get_settings()
     allowed, reason = can_activate(settings)
     if not allowed:
         raise ValueError(reason)
 
-    src = settings.backlog_dir / project_slug
+    src = settings.backlog_dir / f"{project_slug}.md"
     if not src.exists():
         raise FileNotFoundError(f"Project '{project_slug}' not found in backlog/.")
-    dst = settings.active_dir / project_slug
-    shutil.move(str(src), str(dst))
+    dst = settings.active_dir / f"{project_slug}.md"
+    src.rename(dst)
     return dst
 
 
 def archive_project(project_slug: str, settings: Settings | None = None) -> Path:
     """Move a project from active/ to archive/.
 
-    Returns the new project directory path.
+    Returns the new project file path.
     """
     settings = settings or get_settings()
-    src = settings.active_dir / project_slug
+    src = settings.active_dir / f"{project_slug}.md"
     if not src.exists():
         raise FileNotFoundError(f"Project '{project_slug}' not found in active/.")
-    dst = settings.archive_dir / project_slug
-    shutil.move(str(src), str(dst))
+    dst = settings.archive_dir / f"{project_slug}.md"
+    src.rename(dst)
     return dst
 
 

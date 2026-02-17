@@ -10,7 +10,7 @@ A **loop** is any commitment that would continue to nag at you if you didn't wri
 
 ## Two Things
 
-**The Backbone** -- a specification for how your vault is organized. Folder layout, file naming, universal frontmatter. Any folder that follows the spec is a vault. See [backbone-spec/schema.md](backbone-spec/schema.md).
+**The Backbone** -- a specification for how your vault is organized. Folder layout, file naming, inline `#tags`. No YAML frontmatter -- just plain markdown. Any folder that follows the spec is a vault. See [backbone-spec/schema.md](backbone-spec/schema.md).
 
 **The Package** -- Python tools that operate on any conforming vault. Point it at a folder and go.
 

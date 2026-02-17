@@ -14,14 +14,11 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
       YYYY-WNN.md
   projects/
     active/
-      <slug>/
-        README.md
-        tasks.md
-        notes.md
+      <slug>.md
     backlog/
-      <slug>/
+      <slug>.md
     archive/
-      <slug>/
+      <slug>.md
   knowledge/
     <slug>.md
   reviews/
@@ -33,44 +30,21 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
 
 All files are UTF-8 Markdown. No proprietary formats.
 
-## Frontmatter
+## Metadata
 
-Every file may begin with a YAML frontmatter block. When present, it uses this universal schema:
+Files carry no YAML frontmatter. All metadata is derived from the filesystem and git:
 
-```yaml
----
-id: unique-identifier
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
-tags:
-  - tag-one
-  - tag-two
----
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | yes | Unique identifier for the file |
-| `created_at` | date | yes | Date the file was created |
-| `updated_at` | date | no | Date of last meaningful edit |
-| `tags` | list | no | Freeform tags |
-
-No file type has special frontmatter fields. The schema is the same everywhere.
+- **Identity:** The file path is the unique identifier.
+- **Timestamps:** Creation and modification dates come from git history.
+- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
 
 ## Daily Notes
 
 **Path:** `daily/YYYY-MM-DD.md`
 
-One file per calendar day. The `id` is the date string.
+One file per calendar day. The date is the filename.
 
 ```markdown
----
-id: "2026-02-16"
-created_at: 2026-02-16
-updated_at: 2026-02-16
-tags: []
----
-
 # 2026-02-16 Monday
 
 ## Morning: Intention
@@ -106,49 +80,32 @@ Closed loops move to `loops/closed/YYYY-WNN.md`.
 
 ## Projects
 
-**Path:** `projects/active/<slug>/`, `projects/backlog/<slug>/`, `projects/archive/<slug>/`
+**Path:** `projects/active/<slug>.md`, `projects/backlog/<slug>.md`, `projects/archive/<slug>.md`
 
-Each project is a directory containing:
-
-| File | Purpose |
-|------|---------|
-| `README.md` | Context and goals |
-| `tasks.md` | Checklist of work items |
-| `notes.md` | Freeform project notes |
+One markdown file per project. The slug is the filename. Move the file between `active/`, `backlog/`, and `archive/` to change its state.
 
 ```markdown
----
-id: "project-slug"
-created_at: 2026-02-16
-updated_at: 2026-02-16
-tags: []
----
-
 # Project Title
 
-## Context
+## Tasks
+- [ ] Define project scope
 
-## Goals
+## Log
+
 ```
 
-WIP limit: maximum 3 projects in `active/` at any time.
+WIP limit: maximum 3 files in `active/` at any time.
 
 ## Knowledge Notes
 
 **Path:** `knowledge/<slug>.md`
 
-Evergreen notes. The `id` is the slug. `updated_at` tracks review freshness.
+Evergreen notes. The slug is the filename.
 
 ```markdown
----
-id: "topic-slug"
-created_at: 2026-02-16
-updated_at: 2026-02-16
-tags:
-  - topic
----
-
 # Topic Title
+
+#topic
 
 Content goes here. Use [[wikilinks]] to connect to other notes.
 ```
@@ -172,13 +129,6 @@ Zero-structure capture bucket:
 Weekly review output. One file per ISO week.
 
 ```markdown
----
-id: "2026-W07"
-created_at: 2026-02-16
-updated_at: 2026-02-16
-tags: []
----
-
 # Weekly Review -- 2026 Week 07
 
 ## Open Loops
@@ -198,8 +148,8 @@ tags: []
 
 | Marker | Meaning |
 |--------|---------|
-| `- [ ]` | Open task |
-| `- [x]` | Completed task |
+| `- [ ]` | Open loop |
+| `- [x]` | Closed loop |
 
 ## What This Spec Does Not Cover
 
