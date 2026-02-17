@@ -7,8 +7,6 @@ import re
 from datetime import date
 from pathlib import Path
 
-import frontmatter
-
 from adzekit.models import (
     DailyNote,
     LogEntry,
@@ -126,39 +124,26 @@ def format_tasks(tasks: list[Task]) -> str:
 # --- Project parsing ---
 
 
-def parse_project(project_dir: Path, state: ProjectState) -> Project:
-    """Parse a project directory into a Project object."""
-    slug = project_dir.name
+def parse_project(project_path: Path, state: ProjectState) -> Project:
+    """Parse a single project markdown file into a Project object."""
+    slug = project_path.stem
+    text = project_path.read_text(encoding="utf-8")
     title = slug
-    description = ""
-    tasks: list[Task] = []
-    notes = ""
 
-    readme_path = project_dir / "README.md"
-    if readme_path.exists():
-        post = frontmatter.load(str(readme_path))
-        description = post.content
-        for line in post.content.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("# ") and not stripped.startswith("## "):
-                title = stripped.lstrip("# ").strip()
-                break
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("# ") and not stripped.startswith("## "):
+            title = stripped.lstrip("# ").strip()
+            break
 
-    tasks_path = project_dir / "tasks.md"
-    if tasks_path.exists():
-        tasks = parse_tasks(tasks_path.read_text(encoding="utf-8"))
-
-    notes_path = project_dir / "notes.md"
-    if notes_path.exists():
-        notes = notes_path.read_text(encoding="utf-8")
+    tasks = parse_tasks(text)
 
     return Project(
         slug=slug,
         state=state,
         title=title,
-        description=description,
         tasks=tasks,
-        notes=notes,
+        raw_content=text,
     )
 
 

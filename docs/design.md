@@ -28,18 +28,9 @@ For the backbone spec: [../backbone-spec/schema.md](../backbone-spec/schema.md).
 
 When `ADZEKIT_GIT_REPO` is set, `sync_workspace()` clones or pulls, `commit_workspace()` pushes.
 
-## Frontmatter
+## Metadata
 
-All files use the same universal schema:
-
-```yaml
----
-id: unique-identifier
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
-tags: []
----
-```
+Files carry no YAML frontmatter. Identity comes from file paths, timestamps from git, and tags from inline `#tags` in the document body. See the backbone spec for details.
 
 ## Testing
 

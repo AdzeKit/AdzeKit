@@ -23,14 +23,7 @@ def init_workspace(settings: Settings | None = None) -> Path:
     # Seed inbox.md if empty
     if settings.inbox_path.stat().st_size == 0:
         settings.inbox_path.write_text(
-            f"""---
-id: inbox
-created_at: {iso}
-updated_at: {iso}
-tags: []
----
-
-# Inbox
+            f"""# Inbox
 
 Capture anything here. No structure needed.
 
@@ -42,14 +35,7 @@ Capture anything here. No structure needed.
     # Seed loops/open.md with an example loop if empty
     if settings.loops_open.stat().st_size == 0:
         settings.loops_open.write_text(
-            f"""---
-id: open-loops
-created_at: {iso}
-updated_at: {iso}
-tags: []
----
-
-# Open Loops
+            f"""# Open Loops
 
 ## [{iso}] Example: Send Alice the API estimate
 
@@ -76,28 +62,20 @@ tags: []
 
     # Seed one knowledge note if knowledge/ is empty
     if not any(settings.knowledge_dir.iterdir()):
-        _seed_knowledge_note(iso, settings)
+        _seed_knowledge_note(settings)
 
     return settings.workspace
 
 
 def _seed_review(today: date, settings: Settings) -> None:
     """Create an example weekly review file."""
-    iso = today.isoformat()
     week_num = today.isocalendar()[1]
     year = today.year
     review_id = f"{year}-W{week_num:02d}"
     path = settings.reviews_dir / f"{review_id}.md"
 
     path.write_text(
-        f"""---
-id: "{review_id}"
-created_at: {iso}
-updated_at: {iso}
-tags: []
----
-
-# Weekly Review -- {year} Week {week_num:02d}
+        f"""# Weekly Review -- {year} Week {week_num:02d}
 
 ## Open Loops
 - Review all loops in `loops/open.md`
@@ -120,25 +98,18 @@ tags: []
     )
 
 
-def _seed_knowledge_note(iso: str, settings: Settings) -> None:
+def _seed_knowledge_note(settings: Settings) -> None:
     """Create an example knowledge note."""
     path = settings.knowledge_dir / "example-note.md"
 
     path.write_text(
-        f"""---
-id: example-note
-created_at: {iso}
-updated_at: {iso}
-tags:
-  - example
----
+        """# Example Knowledge Note
 
-# Example Knowledge Note
+#example
 
 Evergreen notes capture ideas you want to keep and revisit.
 
-Write one concept per file. Use `updated_at` to track when you last reviewed it.
-Link to related notes with [[wikilinks]].
+Write one concept per file. Link to related notes with [[wikilinks]].
 """,
         encoding="utf-8",
     )
@@ -158,14 +129,7 @@ def create_daily_note(
     if path.exists():
         return path
 
-    template = f"""---
-id: "{iso}"
-created_at: {iso}
-updated_at: {iso}
-tags: []
----
-
-# {iso} {weekday}
+    template = f"""# {iso} {weekday}
 
 ## Morning: Intention
 - [ ] Top priority:
@@ -188,60 +152,26 @@ def create_project(
     backlog: bool = True,
     settings: Settings | None = None,
 ) -> Path:
-    """Scaffold a new project directory.
+    """Create a new project markdown file.
 
-    Creates README.md, tasks.md, notes.md.
     New projects go to backlog/ by default.
     """
     settings = settings or get_settings()
     parent = settings.backlog_dir if backlog else settings.active_dir
-    project_dir = parent / slug
-    project_dir.mkdir(parents=True, exist_ok=True)
+    path = parent / f"{slug}.md"
+
+    if path.exists():
+        return path
 
     title = title or slug
-    today = date.today().isoformat()
 
-    readme = f"""---
-id: "{slug}"
-created_at: {today}
-updated_at: {today}
-tags: []
----
+    template = f"""# {title}
 
-# {title}
-
-## Context
-
-## Goals
-"""
-    (project_dir / "README.md").write_text(readme, encoding="utf-8")
-    (project_dir / "tasks.md").write_text(
-        f"""---
-id: "{slug}-tasks"
-created_at: {today}
-updated_at: {today}
-tags: []
----
-
-# Tasks
-
+## Tasks
 - [ ] Define project scope
-- [ ] Set up initial structure
-""",
-        encoding="utf-8",
-    )
-    (project_dir / "notes.md").write_text(
-        f"""---
-id: "{slug}-notes"
-created_at: {today}
-updated_at: {today}
-tags: []
----
 
-# Notes
+## Log
 
-""",
-        encoding="utf-8",
-    )
-
-    return project_dir
+"""
+    path.write_text(template, encoding="utf-8")
+    return path

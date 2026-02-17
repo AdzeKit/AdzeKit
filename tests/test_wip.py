@@ -38,7 +38,7 @@ def test_activate_from_backlog(workspace):
 
     activate_project("new-proj", workspace)
     assert count_active_projects(workspace) == 1
-    assert (workspace.active_dir / "new-proj" / "README.md").exists()
+    assert (workspace.active_dir / "new-proj.md").exists()
 
 
 def test_activate_respects_limit(workspace):
@@ -56,7 +56,7 @@ def test_archive_project(workspace):
 
     archive_project("done", workspace)
     assert count_active_projects(workspace) == 0
-    assert (workspace.archive_dir / "done" / "README.md").exists()
+    assert (workspace.archive_dir / "done.md").exists()
 
 
 def test_wip_status_summary(workspace):

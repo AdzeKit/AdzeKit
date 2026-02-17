@@ -39,14 +39,13 @@ def test_create_daily_note(workspace):
     assert path2.read_text() == "custom content"
 
 
-def test_create_daily_note_has_universal_frontmatter(workspace):
+def test_create_daily_note_has_no_frontmatter(workspace):
     today = date.today()
     path = create_daily_note(today, workspace)
     content = path.read_text()
-    assert content.startswith("---\n")
-    assert f'id: "{today.isoformat()}"' in content
-    assert f"created_at: {today.isoformat()}" in content
-    assert f"updated_at: {today.isoformat()}" in content
+    assert not content.startswith("---")
+    assert content.startswith("# ")
+    assert today.isoformat() in content
 
 
 def test_create_project(workspace):
@@ -57,12 +56,15 @@ def test_create_project(workspace):
         settings=workspace,
     )
     assert path.exists()
-    assert (path / "README.md").exists()
-    assert (path / "tasks.md").exists()
-    assert (path / "notes.md").exists()
-    readme = (path / "README.md").read_text()
-    assert "Test Project" in readme
-    assert 'id: "test-proj"' in readme
+    assert path.suffix == ".md"
+    content = path.read_text()
+    assert "Test Project" in content
+    assert "## Tasks" in content
+
+    # Creating again should not overwrite
+    path.write_text("custom content")
+    path2 = create_project(slug="test-proj", backlog=True, settings=workspace)
+    assert path2.read_text() == "custom content"
 
 
 def test_create_project_active(workspace):
@@ -73,3 +75,4 @@ def test_create_project_active(workspace):
     )
     assert "active" in str(path)
     assert path.parent == workspace.active_dir
+    assert path.name == "active-proj.md"

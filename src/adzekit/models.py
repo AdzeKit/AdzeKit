@@ -43,14 +43,13 @@ class Task:
 
 @dataclass
 class Project:
-    """A project directory parsed into structured data."""
+    """A single project markdown file parsed into structured data."""
 
     slug: str
     state: ProjectState
     title: str = ""
-    description: str = ""
     tasks: list[Task] = field(default_factory=list)
-    notes: str = ""
+    raw_content: str = ""
 
     @property
     def progress(self) -> float:

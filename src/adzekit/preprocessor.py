@@ -39,9 +39,9 @@ def load_projects(
     for proj_state, parent in targets.items():
         if not parent.exists():
             continue
-        for d in sorted(parent.iterdir()):
-            if d.is_dir():
-                projects.append(parse_project(d, proj_state))
+        for f in sorted(parent.iterdir()):
+            if f.is_file() and f.suffix == ".md":
+                projects.append(parse_project(f, proj_state))
 
     return projects
 
