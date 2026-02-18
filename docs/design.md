@@ -30,7 +30,17 @@ When `ADZEKIT_GIT_REPO` is set, `sync_workspace()` clones or pulls, `commit_work
 
 ## Metadata
 
-Files carry no YAML frontmatter. Identity comes from file paths, timestamps from git, and tags from inline `#tags` in the document body. See the backbone spec for details.
+Files carry no YAML frontmatter. Identity comes from file paths, timestamps from git, and tags from inline `#tags` in the document body. Tags use kebab-case for compound words (`#vector-search`). See the backbone spec for details.
+
+## Project Structure
+
+Every project is a single markdown file with three sections: **Context**, **Log**, and **Notes**.
+
+- **Context** is the stable *why*: purpose, stakeholders, success criteria, constraints. It gives anyone enough background to pick the file up cold. It rarely changes after the first week.
+- **Log** is the chronological *what*: dated events, decisions, blockers, and task checkboxes all interleaved in reverse-chronological order. Keeping tasks and narrative in one stream avoids the drift that happens when a separate task list stops matching reality.
+- **Notes** is the unstructured *everything else*: reference links, scratch calculations, meeting snippets, half-formed ideas. It exists so Context stays clean and Log stays chronological.
+
+The parser extracts checklist items (`- [ ]` / `- [x]`) from the Log section to compute project progress.
 
 ## Testing
 

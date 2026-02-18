@@ -125,18 +125,37 @@ def format_tasks(tasks: list[Task]) -> str:
 
 
 def parse_project(project_path: Path, state: ProjectState) -> Project:
-    """Parse a single project markdown file into a Project object."""
+    """Parse a single project markdown file into a Project object.
+
+    Tasks are extracted from the ``## Log`` section where checklist items
+    and dated events are interleaved.
+    """
     slug = project_path.stem
     text = project_path.read_text(encoding="utf-8")
     title = slug
+    tasks: list[Task] = []
 
+    in_log = False
     for line in text.split("\n"):
         stripped = line.strip()
+
+        # Title from the first top-level heading
         if stripped.startswith("# ") and not stripped.startswith("## "):
             title = stripped.lstrip("# ").strip()
-            break
+            continue
 
-    tasks = parse_tasks(text)
+        # Detect section boundaries
+        if stripped.lower() == "## log":
+            in_log = True
+            continue
+        if stripped.startswith("## "):
+            in_log = False
+            continue
+
+        if in_log:
+            m = _TASK_RE.match(stripped)
+            if m:
+                tasks.append(Task(description=m.group(2), done=m.group(1).lower() == "x"))
 
     return Project(
         slug=slug,

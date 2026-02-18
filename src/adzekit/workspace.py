@@ -167,10 +167,14 @@ def create_project(
 
     template = f"""# {title}
 
-## Tasks
-- [ ] Define project scope
+## Context
+Why this project exists and what success looks like.
 
 ## Log
+- {date.today().isoformat()}: Project created.
+- [ ] Define project scope
+
+## Notes
 
 """
     path.write_text(template, encoding="utf-8")
