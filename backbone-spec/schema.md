@@ -36,7 +36,7 @@ Files carry no YAML frontmatter. All metadata is derived from the filesystem and
 
 - **Identity:** The file path is the unique identifier.
 - **Timestamps:** Creation and modification dates come from git history.
-- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
+- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
 
 ## Daily Notes
 
@@ -84,15 +84,36 @@ Closed loops move to `loops/closed/YYYY-WNN.md`.
 
 One markdown file per project. The slug is the filename. Move the file between `active/`, `backlog/`, and `archive/` to change its state.
 
-```markdown
-# Project Title
+Every project has exactly three sections:
 
-## Tasks
-- [ ] Define project scope
+```markdown
+# Project Title #tag
+
+## Context
+Why this project exists, who it serves, what success looks like, and any
+constraints or dependencies. Write just enough that someone (including
+future-you) can pick the file up cold and understand the stakes.
 
 ## Log
+- YYYY-MM-DD: Reverse-chronological entries -- decisions, progress,
+  blockers, and tasks. The most recent entry is always on top.
+- [ ] Pending tasks live here too, interleaved with dated events.
 
+## Notes
+Freeform scratch space. Paste reference links, sketch ideas, capture
+meeting snippets -- anything that supports the project but doesn't
+belong in the running Log.
 ```
+
+**Why these three and only three?**
+
+- **Context** pins down *why* the project matters once and stays mostly
+  stable. Without it every re-read starts with "wait, what was this?"
+- **Log** captures *what happened and what's next* in time order. Mixing
+  tasks and events in a single stream keeps the narrative honest --
+  priorities and progress live side by side.
+- **Notes** is the pressure-relief valve. Anything that doesn't fit the
+  structured sections goes here instead of cluttering Context or Log.
 
 WIP limit: maximum 3 files in `active/` at any time.
 

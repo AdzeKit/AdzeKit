@@ -59,7 +59,9 @@ def test_create_project(workspace):
     assert path.suffix == ".md"
     content = path.read_text()
     assert "Test Project" in content
-    assert "## Tasks" in content
+    assert "## Context" in content
+    assert "## Log" in content
+    assert "## Notes" in content
 
     # Creating again should not overwrite
     path.write_text("custom content")
