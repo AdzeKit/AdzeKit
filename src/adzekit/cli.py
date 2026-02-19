@@ -98,6 +98,40 @@ def cmd_add_loop(args: argparse.Namespace) -> None:
     print(f"Added loop: {args.title}")
 
 
+# -- tags ------------------------------------------------------------------
+
+
+def cmd_tags(args: argparse.Namespace) -> None:
+    """List tags, search by prefix, or generate Cursor autocomplete snippets."""
+    from adzekit.modules.tags import all_tags, files_for_tag, generate_cursor_snippets
+
+    settings = _resolve_settings(args)
+
+    if args.completions:
+        path = generate_cursor_snippets(settings)
+        print(f"Generated Cursor snippets: {path}")
+        return
+
+    if args.search:
+        files = files_for_tag(args.search, settings)
+        if not files:
+            print(f"No files tagged #{args.search.lstrip('#')}")
+            return
+        tag = args.search.lstrip("#").lower()
+        print(f"#{tag} ({len(files)} files):")
+        for f in files:
+            print(f"  {f.relative_to(settings.workspace)}")
+        return
+
+    tags = all_tags(settings)
+    if not tags:
+        print("No tags found.")
+        return
+    for tag in tags:
+        print(f"  #{tag}")
+    print(f"\n{len(tags)} tags")
+
+
 # -- status ----------------------------------------------------------------
 
 
@@ -161,6 +195,21 @@ def build_parser() -> argparse.ArgumentParser:
     # status
     p_status = sub.add_parser("status", help="Show vault health summary.")
     p_status.set_defaults(func=cmd_status)
+
+    # tags
+    p_tags = sub.add_parser("tags", help="List, search, or autocomplete tags.")
+    p_tags.add_argument(
+        "search",
+        nargs="?",
+        default=None,
+        help="Tag to search for (e.g. vector-search).",
+    )
+    p_tags.add_argument(
+        "--completions",
+        action="store_true",
+        help="Generate .vscode/adzekit.code-snippets for Cursor autocomplete.",
+    )
+    p_tags.set_defaults(func=cmd_tags)
 
     return parser
 

@@ -15,6 +15,7 @@ def test_init_workspace_creates_directories(workspace):
     assert workspace.daily_dir.exists()
     assert workspace.knowledge_dir.exists()
     assert workspace.reviews_dir.exists()
+    assert workspace.stock_dir.exists()
 
 
 def test_init_workspace_seeds_files(workspace):
@@ -78,3 +79,32 @@ def test_create_project_active(workspace):
     assert "active" in str(path)
     assert path.parent == workspace.active_dir
     assert path.name == "active-proj.md"
+
+
+def test_init_workspace_gitignores_stock(workspace):
+    init_workspace(workspace)
+    gitignore = workspace.workspace / ".gitignore"
+    assert gitignore.exists()
+    assert "stock/" in gitignore.read_text()
+
+
+def test_rclone_remote_defaults_empty():
+    from adzekit.config import Settings
+
+    s = Settings()
+    assert s.has_rclone_remote is False
+    assert s.rclone_remote == ""
+
+
+def test_sync_stock_raises_without_remote(workspace):
+    import pytest
+
+    with pytest.raises(ValueError, match="rclone_remote is not configured"):
+        workspace.sync_stock()
+
+
+def test_push_stock_raises_without_remote(workspace):
+    import pytest
+
+    with pytest.raises(ValueError, match="rclone_remote is not configured"):
+        workspace.push_stock()

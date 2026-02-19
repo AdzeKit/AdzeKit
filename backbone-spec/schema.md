@@ -24,11 +24,24 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
   reviews/
     YYYY-WNN.md
   inbox.md
+  stock/                  # git-ignored, synced separately
+    <project-slug>/
+      <any file>
 ```
 
 ## File Encoding
 
 All files are UTF-8 Markdown. No proprietary formats.
+
+## Stock
+
+**Path:** `stock/<project-slug>/`
+
+Raw material that hasn't been shaped yet -- transcripts, PDFs, spreadsheets, exports, recordings. The name follows the woodworking metaphor: stock is the unworked lumber that the adze shapes into the finished piece.
+
+Stock is **not tracked by git**. These files are often large, binary, or in proprietary formats -- none of which git handles well. Instead, `stock/` syncs via rclone to a cloud remote (Google Drive, SharePoint, S3, etc.). Set `ADZEKIT_RCLONE_REMOTE` to configure the remote.
+
+Subdirectories inside `stock/` match project slugs so LLM adapters can find the raw material for a given project and summarize it into that project's `## Log`.
 
 ## Metadata
 
@@ -37,6 +50,23 @@ Files carry no YAML frontmatter. All metadata is derived from the filesystem and
 - **Identity:** The file path is the unique identifier.
 - **Timestamps:** Creation and modification dates come from git history.
 - **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
+
+### Tag conventions
+
+Tags are a flat namespace. There is no tag registry, no controlled vocabulary, and no separate index file.
+
+**Why no index?** A maintained tag list rots the moment someone forgets to update it. Instead, the tag index is computed on the fly by scanning every `.md` file for `#word` tokens -- the filesystem is the source of truth. Tooling can build an in-memory `dict[str, list[Path]]` in milliseconds, even at thousands of files.
+
+**Why no namespacing?** Prefixes like `#p-alice` or `#t-machine-learning` add friction to typing and reading. In practice, tag types distinguish themselves naturally:
+
+- **People:** `#alice-chen`, `#ryan-bondaria`
+- **Topics:** `#vector-search`, `#machine-learning`
+- **Clients/orgs:** `#citco`, `#nova`, `#otpp`
+- **Reference IDs:** `#AR-000109761`
+
+If programmatic classification is ever needed, the tooling layer can infer type from pattern (names vs concepts vs IDs) without burdening the writer.
+
+**Contacts are just tags.** There is no separate contacts system. Mention `#firstname-lastname` wherever a person appears -- in daily notes, loops, project logs. Querying the tag index for that tag produces a complete interaction history across the vault.
 
 ## Daily Notes
 
@@ -169,8 +199,23 @@ Weekly review output. One file per ISO week.
 
 | Marker | Meaning |
 |--------|---------|
-| `- [ ]` | Open loop |
-| `- [x]` | Closed loop |
+| `- [ ]` | Open task |
+| `- [x]` | Closed task |
+
+Tasks support optional inline annotations for sizing and deadlines:
+
+- **T-shirt sizes** -- append `(S)`, `(M)`, `(L)`, or `(XL)` to signal relative effort. No story points, no hour estimates -- just enough to eyeball a week's capacity.
+- **Deadlines** -- append a date in `(YYYY-MM-DD)` when a task is tied to a hard date.
+
+Both annotations are optional and can be combined:
+
+```markdown
+- [ ] Draft API proposal (M)
+- [ ] Submit compliance report (L) (2026-03-20)
+- [ ] Quick fix for login bug (S)
+```
+
+Estimation tooling will be built around these sizes to surface workload and forecast throughput.
 
 ## What This Spec Does Not Cover
 
