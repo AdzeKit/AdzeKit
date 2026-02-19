@@ -45,6 +45,11 @@ class Settings(BaseSettings):
         description="Branch to use when syncing with the git remote.",
     )
 
+    rclone_remote: str = Field(
+        default="",
+        description="rclone remote path for stock/, e.g. 'gdrive:adzekit-stock'.",
+    )
+
     # --- Derived workspace paths (v1 backbone) ---
 
     @property
@@ -92,6 +97,14 @@ class Settings(BaseSettings):
         return self.workspace / "inbox.md"
 
     @property
+    def stock_dir(self) -> Path:
+        return self.workspace / "stock"
+
+    @property
+    def has_rclone_remote(self) -> bool:
+        return bool(self.rclone_remote)
+
+    @property
     def is_git_backed(self) -> bool:
         return bool(self.git_repo)
 
@@ -106,12 +119,22 @@ class Settings(BaseSettings):
             self.daily_dir,
             self.knowledge_dir,
             self.reviews_dir,
+            self.stock_dir,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 
         for f in [self.loops_open, self.inbox_path]:
             if not f.exists():
                 f.write_text("", encoding="utf-8")
+
+        # Keep stock/ out of git
+        gitignore = self.workspace / ".gitignore"
+        if gitignore.exists():
+            content = gitignore.read_text(encoding="utf-8")
+            if "stock/" not in content:
+                gitignore.write_text(content.rstrip() + "\nstock/\n", encoding="utf-8")
+        else:
+            gitignore.write_text("stock/\n", encoding="utf-8")
 
     # --- Git operations ---
 
@@ -166,6 +189,31 @@ class Settings(BaseSettings):
             return ""
         result = self._run_git("status", "--short")
         return result.stdout
+
+    # --- rclone operations (stock/) ---
+
+    def sync_stock(self) -> None:
+        """Pull stock/ from the rclone remote."""
+        if not self.has_rclone_remote:
+            raise ValueError(
+                "rclone_remote is not configured. Set ADZEKIT_RCLONE_REMOTE."
+            )
+        self.stock_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["rclone", "sync", self.rclone_remote, str(self.stock_dir)],
+            check=True,
+        )
+
+    def push_stock(self) -> None:
+        """Push local stock/ to the rclone remote."""
+        if not self.has_rclone_remote:
+            raise ValueError(
+                "rclone_remote is not configured. Set ADZEKIT_RCLONE_REMOTE."
+            )
+        subprocess.run(
+            ["rclone", "sync", str(self.stock_dir), self.rclone_remote],
+            check=True,
+        )
 
 
 def get_settings() -> Settings:
