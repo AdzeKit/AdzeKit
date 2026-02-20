@@ -132,6 +132,53 @@ def cmd_tags(args: argparse.Namespace) -> None:
     print(f"\n{len(tags)} tags")
 
 
+# -- project ---------------------------------------------------------------
+
+
+def cmd_project(args: argparse.Namespace) -> None:
+    """Create a new project file from the backbone template."""
+    from adzekit.workspace import create_project
+
+    settings = _resolve_settings(args)
+    path = create_project(
+        slug=args.slug,
+        title=args.title or "",
+        backlog=not args.active,
+        settings=settings,
+    )
+    print(path)
+
+
+# -- poc-init --------------------------------------------------------------
+
+
+def cmd_poc_init(args: argparse.Namespace) -> None:
+    """Generate a POC design document template in stock/."""
+    from adzekit.modules.export import to_docx
+    from adzekit.modules.poc import generate_poc
+
+    settings = _resolve_settings(args)
+    path = generate_poc(args.slug, settings)
+    print(f"Generated POC template: {path}")
+
+    if args.docx:
+        docx_path = to_docx(path)
+        print(f"Exported to docx: {docx_path}")
+
+
+# -- export ----------------------------------------------------------------
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    """Export a markdown file to docx via pandoc."""
+    from adzekit.modules.export import to_docx
+
+    source = Path(args.file).expanduser().resolve()
+    output = Path(args.output).expanduser().resolve() if args.output else None
+    docx_path = to_docx(source, output)
+    print(f"Exported: {docx_path}")
+
+
 # -- status ----------------------------------------------------------------
 
 
@@ -192,9 +239,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_loop.add_argument("--project", default=None, help="Project slug.")
     p_loop.set_defaults(func=cmd_add_loop)
 
+    # project
+    p_project = sub.add_parser("project", help="Create a new project file.")
+    p_project.add_argument("slug", help="Project slug (e.g. strathcona-reservoir).")
+    p_project.add_argument(
+        "--title", default=None, help="Project title (default: slug).",
+    )
+    p_project.add_argument(
+        "--active", action="store_true",
+        help="Create in active/ instead of backlog/.",
+    )
+    p_project.set_defaults(func=cmd_project)
+
     # status
     p_status = sub.add_parser("status", help="Show vault health summary.")
     p_status.set_defaults(func=cmd_status)
+
+    # poc-init
+    p_poc = sub.add_parser("poc-init", help="Generate a POC design document in stock/.")
+    p_poc.add_argument("slug", help="Project slug (e.g. citco-columnmapping).")
+    p_poc.add_argument(
+        "--docx",
+        action="store_true",
+        help="Also export the generated template to .docx via pandoc.",
+    )
+    p_poc.set_defaults(func=cmd_poc_init)
+
+    # export
+    p_export = sub.add_parser("export", help="Export a markdown file to docx.")
+    p_export.add_argument("file", help="Path to the markdown file.")
+    p_export.add_argument(
+        "-o", "--output",
+        default=None,
+        help="Output path (default: same directory, .docx extension).",
+    )
+    p_export.set_defaults(func=cmd_export)
 
     # tags
     p_tags = sub.add_parser("tags", help="List, search, or autocomplete tags.")

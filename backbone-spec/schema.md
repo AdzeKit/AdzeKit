@@ -158,7 +158,7 @@ Evergreen notes. The slug is the filename.
 
 #topic
 
-Content goes here. Use [[wikilinks]] to connect to other notes.
+Content goes here. Use standard [markdown links](../knowledge/other-note.md) to connect to other notes.
 ```
 
 ## Inbox
@@ -216,6 +216,18 @@ Both annotations are optional and can be combined:
 ```
 
 Estimation tooling will be built around these sizes to surface workload and forecast throughput.
+
+## Export
+
+AdzeKit uses pandoc to convert markdown to `.docx`. This is the primary path for sharing documents with stakeholders who work in Word or Google Docs.
+
+- `adzekit export <file.md>` converts any markdown file to `.docx` alongside the source.
+- `adzekit export <file.md> -o path/to/output.docx` writes to a specific path.
+- `adzekit poc-init <slug> --docx` generates a POC template and converts it in one step.
+
+For Google Docs: export to `.docx`, then upload to Google Drive which auto-converts on import.
+
+Pandoc is an external dependency (`brew install pandoc`) and is not bundled with AdzeKit.
 
 ## What This Spec Does Not Cover
 

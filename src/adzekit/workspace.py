@@ -109,7 +109,7 @@ def _seed_knowledge_note(settings: Settings) -> None:
 
 Evergreen notes capture ideas you want to keep and revisit.
 
-Write one concept per file. Link to related notes with [[wikilinks]].
+Write one concept per file. Link to related notes with standard [markdown links](relative-path.md).
 """,
         encoding="utf-8",
     )
@@ -158,6 +158,7 @@ def create_project(
     """
     settings = settings or get_settings()
     parent = settings.backlog_dir if backlog else settings.active_dir
+    parent.mkdir(parents=True, exist_ok=True)
     path = parent / f"{slug}.md"
 
     if path.exists():

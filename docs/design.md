@@ -62,6 +62,14 @@ Subdirectories inside `stock/` match project slugs (`stock/otpp-vectorsearch/`).
 
 AdzeKit uses t-shirt sizes -- `(S)`, `(M)`, `(L)`, `(XL)` -- appended to tasks for relative effort. No story points or hour tracking; just enough signal to eyeball whether a week is overloaded. Tasks can also carry inline deadlines as `(YYYY-MM-DD)` when tied to hard dates. Both annotations are optional. Estimation tooling will parse these markers to surface workload summaries and forecast throughput.
 
+## Export
+
+`adzekit export <file>` converts any markdown file to `.docx` via pandoc. This is the standard path for sharing POC documents, proposals, or project summaries with stakeholders who expect Word/Google Docs format. Pandoc is an external dependency (not bundled) and must be installed on the host.
+
+The `poc-init` command also accepts `--docx` to generate the POC template and convert it in one step.
+
+For Google Docs: export to `.docx`, then upload -- Google Drive auto-converts `.docx` on import with full fidelity.
+
 ## Testing
 
 Tests use `pytest` with a `workspace` fixture that creates a temporary vault in `tmp_path`. No mocks for file I/O.
