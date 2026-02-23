@@ -60,6 +60,36 @@ def test_add_loop(tmp_path):
     assert "2026-02-20" in content
 
 
+def test_review_creates_weekly_review(tmp_path, capsys):
+    target = tmp_path / "vault"
+    main(["init", str(target)])
+    main(["--vault", str(target), "review"])
+
+    output = capsys.readouterr().out.strip()
+    review_path = target / "reviews" / output.split("/")[-1]
+    assert review_path.exists()
+
+    content = review_path.read_text()
+    assert "Review" in content
+    assert "Open Loops" in content
+    assert "Reflection" in content
+
+
+def test_review_with_date(tmp_path, capsys):
+    target = tmp_path / "vault"
+    main(["init", str(target)])
+    main(["--vault", str(target), "review", "--date", "2026-01-06"])
+
+    output = capsys.readouterr().out.strip()
+    assert "2026-W02" in output
+
+    review_path = target / "reviews" / "2026-W02.md"
+    assert review_path.exists()
+    content = review_path.read_text()
+    assert "Week 02" in content
+    assert "(2026-01-06)" in content
+
+
 def test_status(tmp_path, capsys):
     target = tmp_path / "vault"
     main(["init", str(target)])

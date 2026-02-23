@@ -67,15 +67,27 @@ Capture anything here. No structure needed.
     return settings.workspace
 
 
-def _seed_review(today: date, settings: Settings) -> None:
-    """Create an example weekly review file."""
-    week_num = today.isocalendar()[1]
-    year = today.year
+def create_review(
+    target_date: date | None = None,
+    settings: Settings | None = None,
+) -> Path:
+    """Create a weekly review file for the week containing target_date.
+
+    Uses the ISO week number. Returns the path to the review file.
+    If the file already exists it is left untouched.
+    """
+    settings = settings or get_settings()
+    target_date = target_date or date.today()
+    year, week_num, _ = target_date.isocalendar()
     review_id = f"{year}-W{week_num:02d}"
     path = settings.reviews_dir / f"{review_id}.md"
 
+    if path.exists():
+        return path
+
+    iso = target_date.isoformat()
     path.write_text(
-        f"""# Weekly Review -- {year} Week {week_num:02d}
+        f"""# {year} Week {week_num:02d} Review ({iso})
 
 ## Open Loops
 - Review all loops in `loops/open.md`
@@ -96,6 +108,12 @@ def _seed_review(today: date, settings: Settings) -> None:
 """,
         encoding="utf-8",
     )
+    return path
+
+
+def _seed_review(today: date, settings: Settings) -> None:
+    """Create an example weekly review file (used by init)."""
+    create_review(today, settings)
 
 
 def _seed_knowledge_note(settings: Settings) -> None:
