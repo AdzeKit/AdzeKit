@@ -74,6 +74,19 @@ def cmd_today(args: argparse.Namespace) -> None:
     print(path)
 
 
+# -- review ----------------------------------------------------------------
+
+
+def cmd_review(args: argparse.Namespace) -> None:
+    """Create (if needed) and print the path to this week's review."""
+    from adzekit.workspace import create_review
+
+    settings = _resolve_settings(args)
+    review_date = date.fromisoformat(args.date) if args.date else None
+    path = create_review(target_date=review_date, settings=settings)
+    print(path)
+
+
 # -- add-loop --------------------------------------------------------------
 
 
@@ -228,6 +241,15 @@ def build_parser() -> argparse.ArgumentParser:
     # today
     p_today = sub.add_parser("today", help="Create/show today's daily note.")
     p_today.set_defaults(func=cmd_today)
+
+    # review
+    p_review = sub.add_parser("review", help="Create/show this week's review.")
+    p_review.add_argument(
+        "--date",
+        default=None,
+        help="Date within the target week (YYYY-MM-DD, default: today).",
+    )
+    p_review.set_defaults(func=cmd_review)
 
     # add-loop
     p_loop = sub.add_parser("add-loop", help="Add a loop to open.md.")
