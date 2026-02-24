@@ -24,6 +24,24 @@ def _resolve_settings(args: argparse.Namespace):
     return Settings(**kwargs)
 
 
+ADZE = r"""
+   //\\
+  //  \\
+ //
+//
+
+ A D Z E K I T
+"""
+
+
+# -- adze ------------------------------------------------------------------
+
+
+def cmd_adze(args: argparse.Namespace) -> None:
+    """Print the AdzeKit symbol."""
+    print(ADZE)
+
+
 # -- init ------------------------------------------------------------------
 
 
@@ -87,6 +105,48 @@ def cmd_review(args: argparse.Namespace) -> None:
     print(path)
 
 
+# -- sweep -----------------------------------------------------------------
+
+
+def _log_sweep_to_daily(count: int, settings: "Settings") -> None:
+    """Append a sweep entry to today's daily note under ## Log."""
+    from adzekit.workspace import create_daily_note
+
+    path = create_daily_note(settings=settings)
+    content = path.read_text(encoding="utf-8")
+
+    entry = f"- Swept {count} loop(s) closed"
+    # Insert after the ## Log heading
+    marker = "## Log"
+    idx = content.find(marker)
+    if idx == -1:
+        # No Log section -- append to end
+        content = content.rstrip() + f"\n\n{entry}\n"
+    else:
+        insert_at = idx + len(marker)
+        # Skip any trailing whitespace/newline right after the heading
+        while insert_at < len(content) and content[insert_at] == "\n":
+            insert_at += 1
+        content = content[:insert_at] + entry + "\n" + content[insert_at:]
+
+    path.write_text(content, encoding="utf-8")
+
+
+def cmd_sweep(args: argparse.Namespace) -> None:
+    """Move all [x] loops from open.md to closed.md."""
+    from adzekit.modules.loops import sweep_closed
+
+    settings = _resolve_settings(args)
+    swept = sweep_closed(settings)
+    if not swept:
+        print("Nothing to sweep -- no closed loops in open.md.")
+    else:
+        _log_sweep_to_daily(len(swept), settings)
+        for loop in swept:
+            print(f"  swept: {loop.title}")
+        print(f"\n{len(swept)} loop(s) moved to closed.md")
+
+
 # -- add-loop --------------------------------------------------------------
 
 
@@ -100,12 +160,13 @@ def cmd_add_loop(args: argparse.Namespace) -> None:
     loop = Loop(
         date=date.today(),
         title=args.title,
-        who=args.who,
-        what=args.what,
+        who=args.who or "",
+        what=args.what or "",
         due=due,
         status="Open",
         next_action=args.next or "",
         project=args.project or "",
+        size=args.size or "",
     )
     add_loop(loop, settings)
     print(f"Added loop: {args.title}")
@@ -167,11 +228,18 @@ def cmd_project(args: argparse.Namespace) -> None:
 
 def cmd_poc_init(args: argparse.Namespace) -> None:
     """Generate a POC design document template in stock/."""
+    import sys
+
     from adzekit.modules.export import to_docx
     from adzekit.modules.poc import generate_poc
 
     settings = _resolve_settings(args)
-    path = generate_poc(args.slug, settings)
+    try:
+        path = generate_poc(args.slug, settings)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
     print(f"Generated POC template: {path}")
 
     if args.docx:
@@ -186,8 +254,18 @@ def cmd_export(args: argparse.Namespace) -> None:
     """Export a markdown file to docx via pandoc."""
     from adzekit.modules.export import to_docx
 
-    source = Path(args.file).expanduser().resolve()
-    output = Path(args.output).expanduser().resolve() if args.output else None
+    settings = _resolve_settings(args)
+    raw = Path(args.file)
+    # Resolve relative paths against the vault root
+    source = raw if raw.is_absolute() else (settings.workspace / raw)
+    source = source.expanduser().resolve()
+
+    output = None
+    if args.output:
+        raw_out = Path(args.output)
+        output = raw_out if raw_out.is_absolute() else (settings.workspace / raw_out)
+        output = output.expanduser().resolve()
+
     docx_path = to_docx(source, output)
     print(f"Exported: {docx_path}")
 
@@ -197,6 +275,7 @@ def cmd_export(args: argparse.Namespace) -> None:
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Print a summary of vault health."""
+    from adzekit.modules.git_age import project_ages
     from adzekit.modules.loops import loop_stats
     from adzekit.modules.wip import wip_status
 
@@ -210,6 +289,15 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"Open loops: {loops['open']}")
     print(f"Overdue loops: {loops['overdue']}")
     print(f"Approaching SLA: {loops['approaching_sla']}")
+
+    ages = project_ages(settings)
+    if ages:
+        print("\nProject ages:")
+        for a in ages:
+            name = a.path.stem
+            stale = f"{a.stale_days}d ago" if a.stale_days is not None else "untracked"
+            created = f"{a.age_days}d old" if a.age_days is not None else ""
+            print(f"  {name}: modified {stale}" + (f", {created}" if created else ""))
 
 
 # -- parser ----------------------------------------------------------------
@@ -227,6 +315,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
+
+    # adze
+    p_adze = sub.add_parser("adze", help="Print the AdzeKit symbol.")
+    p_adze.set_defaults(func=cmd_adze)
 
     # init
     p_init = sub.add_parser("init", help="Initialize a new vault.")
@@ -251,11 +343,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_review.set_defaults(func=cmd_review)
 
+    # sweep
+    p_sweep = sub.add_parser("sweep", help="Move [x] loops from open.md to closed.md.")
+    p_sweep.set_defaults(func=cmd_sweep)
+
     # add-loop
     p_loop = sub.add_parser("add-loop", help="Add a loop to open.md.")
     p_loop.add_argument("title", help="Loop title.")
-    p_loop.add_argument("--who", required=True, help="Who is this commitment with?")
-    p_loop.add_argument("--what", required=True, help="What is the commitment?")
+    p_loop.add_argument("--size", default=None, help="T-shirt size (XS, S, M, L, XL).")
+    p_loop.add_argument("--who", default=None, help="Who is this commitment with?")
+    p_loop.add_argument("--what", default=None, help="What is the commitment?")
     p_loop.add_argument("--due", default=None, help="Due date (YYYY-MM-DD).")
     p_loop.add_argument("--next", default=None, help="Next action.")
     p_loop.add_argument("--project", default=None, help="Project slug.")
@@ -289,11 +386,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     # export
     p_export = sub.add_parser("export", help="Export a markdown file to docx.")
-    p_export.add_argument("file", help="Path to the markdown file.")
+    p_export.add_argument("file", help="Path to the markdown file (relative to vault root, or absolute).")
     p_export.add_argument(
         "-o", "--output",
         default=None,
-        help="Output path (default: same directory, .docx extension).",
+        help="Output path, relative to vault root or absolute (default: same directory, .docx extension).",
     )
     p_export.set_defaults(func=cmd_export)
 

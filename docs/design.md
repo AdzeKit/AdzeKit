@@ -17,7 +17,7 @@ For the backbone spec: [../backbone-spec/schema.md](../backbone-spec/schema.md).
 
 **Access Layer** -- Knows the backbone schema. All markdown I/O lives here. `config.py` resolves the vault path. `parser.py` reads/writes markdown. `models.py` defines data structures. `preprocessor.py` loads files into typed objects.
 
-**Feature Layer** (`modules/`) -- Implements commands using access layer primitives. `loops.py` manages the loop lifecycle. `wip.py` enforces WIP limits.
+**Feature Layer** (`modules/`) -- Implements commands using access layer primitives. `loops.py` manages the loop lifecycle. `wip.py` enforces WIP limits. `git_age.py` queries git for file-level timestamps. `tags.py` scans for inline `#tags`.
 
 ## Vault Discovery
 
@@ -32,9 +32,43 @@ When `ADZEKIT_GIT_REPO` is set, `sync_workspace()` clones or pulls, `commit_work
 
 Files carry no YAML frontmatter. Identity comes from file paths, timestamps from git, and tags from inline `#tags` in the document body. Tags use kebab-case for compound words (`#vector-search`). See the backbone spec for details.
 
+### Timestamps
+
+Two timestamp mechanisms coexist for different reasons:
+
+- **File-level timestamps** (projects, reviews, knowledge notes) come from git history. The `git_age` module queries `git log` for creation and last-modified dates per file. This works because each of these is its own file with stable git history.
+- **Loop timestamps** are inline `[YYYY-MM-DD]` dates. Loops live in a shared file (`open.md`) that gets rewritten on every sweep, which destroys `git blame` history for individual lines. Inline dates survive rewrites and make loop age visible at a glance.
+
+The `status` command surfaces both: loop ages from inline dates, project staleness from git.
+
+#### Loop date lifecycle
+
+The inline `[YYYY-MM-DD]` date has a dual meaning depending on which file the loop is in:
+
+| File | Date meaning | Set by |
+|------|-------------|--------|
+| `open.md` | Creation date | `add-loop` CLI or manual entry |
+| `closed.md` | Closure date | `sweep` command (overwrites with today) |
+
+This works because the relevant question is different in each context. In `open.md` you want to know "how long has this been sitting here?" -- the creation date answers that. In `closed.md` you want to know "when did I actually close this?" -- the closure date answers that.
+
+The creation date is not destroyed: git history preserves it. `git log -p -- loops/open.md` shows every commit that added or removed lines, so the original creation commit is always recoverable. The sweep commit itself records both sides: the line disappearing from `open.md` (with its creation date) and appearing in `closed.md` (with its closure date).
+
+#### Identity and the rename problem
+
+Loops have no stable identifier -- no UUID, no auto-incrementing number. Identity is the title string plus its date. This is a deliberate trade-off:
+
+**What works:** If a user never edits a loop's title, `git log -p --all -S "title text"` reconstructs the full lifecycle: creation commit, any intermediate rewrites, and the closure commit. The `git_age` module could be extended to automate this kind of loop archaeology.
+
+**What breaks:** If a user changes "Follow up with Alice" to "Follow up with Alice on the API estimate", git sees a line removed and a different line added. Within a single commit this is fine (git shows it as a modification), but across commits, programmatic tools cannot reliably match the old string to the new one without fuzzy comparison.
+
+**Why this is acceptable:** Loops are meant to be short-lived commitments (hours to days, not months). Most title edits happen right after creation, before any state transitions. The closed archive is a reference log, not an audit trail -- if a link between an open and closed loop is lost because of a rename, the practical cost is negligible.
+
+**Escape hatch:** If stable identity ever becomes important (e.g. for cycle-time metrics or compliance tracking), the format can be extended with an inline hash like `{#a1b2}` after the title. The parser and `format_loop` would need a one-line addition, and existing loops without IDs would still parse correctly. This is deferred because the added friction is not worth the benefit for most vaults.
+
 ### Tags at scale
 
-Tags are a flat, unregistered namespace. There is no `tags.json` or `tags.md` to maintain -- a maintained index drifts the moment someone writes a new tag and forgets to update the list. Instead, the tag index is always computed from the filesystem: scan every `.md` file for `#word` tokens and build `dict[str, list[Path]]` in memory. This stays fast even at thousands of files because it's a single-pass regex over small text files.
+Tags are a flat, case-insensitive, unregistered namespace. All tags are lowercased at extraction (`extract_tags` calls `.lower()`), so `#Citco` and `#citco` always match. There is no `tags.json` or `tags.md` to maintain -- a maintained index drifts the moment someone writes a new tag and forgets to update the list. Instead, the tag index is always computed from the filesystem: scan every `.md` file for `#word` tokens and build `dict[str, list[Path]]` in memory. This stays fast even at thousands of files because it's a single-pass regex over small text files.
 
 Contacts, topics, clients, and reference IDs all use the same `#kebab-case` tag syntax. No namespace prefixes -- types are self-evident from context (names vs concepts vs alphanumeric IDs). If tooling ever needs to classify tags programmatically, it can infer type from pattern without adding structure to the writing surface.
 

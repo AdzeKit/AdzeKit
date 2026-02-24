@@ -33,7 +33,7 @@ def test_add_and_read_loop(workspace):
     loops = get_open_loops(workspace)
     assert len(loops) == 1
     assert loops[0].title == "Test loop"
-    assert loops[0].who == "Alice"
+    assert loops[0].due is not None
 
 
 def test_close_loop(workspace):

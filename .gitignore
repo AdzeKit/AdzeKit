@@ -27,3 +27,4 @@ Thumbs.db
 # Google OAuth credentials
 credentials.json
 token.json
+stock/

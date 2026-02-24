@@ -71,6 +71,43 @@ def close_loop(title: str, settings: Settings | None = None) -> bool:
     return True
 
 
+def sweep_closed(settings: Settings | None = None) -> list[Loop]:
+    """Move all [x] loops from open.md to closed.md.
+
+    Returns the list of loops that were swept.
+    """
+    settings = settings or get_settings()
+    loops = get_open_loops(settings)
+    still_open = []
+    swept = []
+
+    today = date.today()
+    for loop in loops:
+        if loop.status.lower() == "closed":
+            loop.date = today  # stamp the closed date
+            swept.append(loop)
+        else:
+            still_open.append(loop)
+
+    if not swept:
+        return []
+
+    # Rewrite open.md with only open loops
+    open_content = "# Open Loops\n\n" + format_loops(still_open) + "\n"
+    settings.loops_open.write_text(open_content, encoding="utf-8")
+
+    # Append swept loops to closed.md
+    closed_path = settings.loops_dir / "closed.md"
+    if closed_path.exists():
+        existing = closed_path.read_text(encoding="utf-8").rstrip()
+    else:
+        existing = "# Closed Loops"
+    existing += "\n" + format_loops(swept) + "\n"
+    closed_path.write_text(existing, encoding="utf-8")
+
+    return swept
+
+
 def get_overdue_loops(settings: Settings | None = None) -> list[Loop]:
     """Return loops that are past their due date."""
     settings = settings or get_settings()

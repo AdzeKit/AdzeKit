@@ -49,15 +49,15 @@ def test_add_loop(tmp_path):
     main([
         "--vault", str(target),
         "add-loop", "Send update to Alice",
-        "--who", "Alice",
-        "--what", "Weekly status on API project",
+        "--size", "XS",
         "--due", "2026-02-20",
     ])
 
     content = (target / "loops" / "open.md").read_text()
     assert "Send update to Alice" in content
-    assert "Alice" in content
-    assert "2026-02-20" in content
+    assert "(XS)" in content
+    assert "(2026-02-20)" in content
+    assert f"[{date.today().isoformat()}]" in content
 
 
 def test_review_creates_weekly_review(tmp_path, capsys):
