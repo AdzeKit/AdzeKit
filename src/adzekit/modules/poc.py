@@ -14,25 +14,26 @@ from adzekit.config import Settings, get_settings
 POC_TEMPLATE = """\
 # [POC] {title}
 
-| Field        | Value        |
-|--------------|--------------|
-| Last Updated | {date_created} |
-| Status       | Not Started  |
+*Created {date_created} · Status: Not Started*
 
-**TL;DR**
-Problem:
-Solution:
-Goal:
+## TL;DR
+
+**Problem:**
+**Solution:**
+**Goal:**
 
 ## Goals & Non-Goals
 
-| | Description |
-|---|---|
-| **Goal 1** | |
-| **Goal 2** | |
-| **Goal 3** | |
-| **Non-Goal 1** | |
-| **Non-Goal 2** | |
+**Goals**
+
+-
+-
+-
+
+**Non-goals**
+
+-
+-
 
 ## Problem
 
@@ -42,127 +43,54 @@ Goal:
 
 -
 -
--
-
-### Alternatives Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| | | |
-| | | |
-| This approach | | |
 
 ## Solution Overview
 
-### Component Map
-
-| Component | Technology | Role |
-|-----------|------------|------|
-| | | |
-| | | |
-| | | |
+Describe the approach at a high level -- what are we building, how does it work, and why this design over alternatives?
 
 ## Requirements
 
-| ID | Requirement | Priority | Scope |
-|----|-------------|----------|-------|
-| R-1 | | Must | PoC |
-| R-2 | | Must | PoC |
-| R-3 | | Should | PoC |
-| R-4 | | Could | Post-PoC |
+Each requirement has a success metric. We evaluate the POC against these.
 
-## Data & Prerequisites
+- **R-1:** *Requirement description.* KPI: metric ≥ target.
+- **R-2:** *Requirement description.* KPI: metric ≥ target.
+- **R-3:** *Requirement description.* KPI: metric ≥ target.
 
-### Source Data
+### Component Map
 
-| ID | Name / System | Format | Est. Rows | Owner | Access |
-|----|---------------|--------|-----------|-------|--------|
-| DS-1 | | | | | |
-| DS-2 | | | | | |
+- **Component A** --
+- **Component B** --
+- **Component C** --
 
-### Prerequisites Checklist
+## Prerequisites
+
+Describe what must be in place before work begins -- data access, environments, permissions, dependencies.
 
 - [ ] Access credentials for all data sources
 - [ ] Target schema or output format defined
-- [ ] API keys configured and rate limits reviewed
 - [ ] Development environment validated
 - [ ] Sample data available
-- [ ] Storage path for artifacts defined
-
-## Design Notes
 
 ## Implementation Plan
 
 ### Milestones
 
-| Phase | Description | Start | End | Status |
-|-------|-------------|-------|-----|--------|
-| 0 | Setup & infra | | | Not Started |
-| 1 | Core pipeline | | | Not Started |
-| 2 | Integration & testing | | | Not Started |
-| 3 | Evaluation & readout | | | Not Started |
+- **Phase 0 — Setup & infra:**
+- **Phase 1 — Core pipeline:**
+- **Phase 2 — Integration & testing:**
+- **Phase 3 — Evaluation & readout:**
 
 ### Tasks
 
 {tasks}
 
-## Key Performance Indicators
-
-| ID | Metric | Target | Result |
-|----|--------|--------|--------|
-| KPI-1 | | | TBD |
-| KPI-2 | | | TBD |
-| KPI-3 | | | TBD |
-
-## Risks
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| | | | |
-| | | | |
-| Scope creep | High | Medium | Enforce non-goals; weekly scope check |
-
-## Stakeholders
-
-| Name | Role | Contact |
-|------|------|---------|
-| | Sponsor | |
-| | Engineer | |
-| | Domain SME | |
-
 ## Results
 
 > *Populate after PoC execution.*
 
-| Metric | Result | Notes |
-|--------|--------|-------|
-| KPI-1 | | |
-| KPI-2 | | |
-
-**Key observations:**
 - What worked:
 - What didn't:
 - Open questions for next phase:
-
-## Open Questions
-
-| # | Question | Owner | Due | Answer |
-|---|----------|-------|-----|--------|
-| 1 | | | | |
-
-## Appendix
-
-### Glossary
-
-| Term | Definition |
-|------|------------|
-| | |
-
-### Resources
-
-| Resource | Link |
-|----------|------|
-| | |
 """
 
 
@@ -197,9 +125,10 @@ def _extract_project_fields(project_path: Path) -> dict[str, str]:
 
         if stripped.startswith("# ") and not stripped.startswith("## "):
             raw_title = stripped.lstrip("# ").strip()
-            title = " ".join(
-                w for w in raw_title.split() if not w.startswith("#")
-            ).strip() or raw_title
+            title = (
+                " ".join(w for w in raw_title.split() if not w.startswith("#")).strip()
+                or raw_title
+            )
             continue
 
         lower = stripped.lower()
@@ -244,14 +173,13 @@ def generate_poc(
 
     project_path = _find_project(slug, settings)
 
-    if project_path:
-        fields = _extract_project_fields(project_path)
-    else:
-        fields = {
-            "title": slug,
-            "context": "",
-            "tasks": [],
-        }
+    if not project_path:
+        raise FileNotFoundError(
+            f"No project file found for '{slug}'. "
+            f"Create one first with: adzekit project {slug}"
+        )
+
+    fields = _extract_project_fields(project_path)
 
     task_lines = fields["tasks"]
     if task_lines:

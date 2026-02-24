@@ -37,14 +37,7 @@ Capture anything here. No structure needed.
         settings.loops_open.write_text(
             f"""# Open Loops
 
-## [{iso}] Example: Send Alice the API estimate
-
-- **Who:** Alice
-- **What:** Provide architecture proposal and timeline estimate
-- **Due:** {iso}
-- **Status:** Open
-- **Next:** Draft estimate and send by end of week
-
+- [ ] (S) [{iso}] Send Alice the API estimate
 """,
             encoding="utf-8",
         )

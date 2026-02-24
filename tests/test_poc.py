@@ -1,24 +1,15 @@
 """Tests for POC design document generation."""
 
+import pytest
+
 from adzekit.modules.poc import generate_poc
 from adzekit.workspace import create_project
 
 
-def test_generate_poc_blank(workspace):
-    """Generate a POC template with no existing project file."""
-    path = generate_poc("new-idea", workspace)
-    assert path.exists()
-    assert path.parent.name == "new-idea"
-    assert path.parent.parent == workspace.stock_dir
-    assert path.name == "poc-design.md"
-
-    content = path.read_text()
-    assert "# [POC] new-idea" in content
-    assert "## Goals & Non-Goals" in content
-    assert "## Key Performance Indicators" in content
-    assert "## Risks" in content
-    # No leftover {{placeholders}}
-    assert "{{" not in content
+def test_generate_poc_requires_project(workspace):
+    """Raise FileNotFoundError when no project file exists for the slug."""
+    with pytest.raises(FileNotFoundError, match="No project file found"):
+        generate_poc("nonexistent-slug", workspace)
 
 
 def test_generate_poc_from_project(workspace):
@@ -60,6 +51,7 @@ Some scratch notes here.
 
 def test_generate_poc_creates_stock_dir(workspace):
     """Stock subdirectory is created if it doesn't exist."""
+    create_project("brand-new", title="Brand New", backlog=False, settings=workspace)
     path = generate_poc("brand-new", workspace)
     assert (workspace.stock_dir / "brand-new").is_dir()
     assert path.exists()
@@ -67,29 +59,23 @@ def test_generate_poc_creates_stock_dir(workspace):
 
 def test_generate_poc_has_all_sections(workspace):
     """Verify the template has all major sections."""
+    create_project("full-check", title="Full Check", backlog=False, settings=workspace)
     path = generate_poc("full-check", workspace)
     content = path.read_text()
 
     expected_sections = [
+        "## TL;DR",
         "## Goals & Non-Goals",
         "## Problem",
         "### Why Now",
-        "### Alternatives Considered",
         "## Solution Overview",
         "### Component Map",
         "## Requirements",
-        "## Data & Prerequisites",
-        "### Prerequisites Checklist",
-        "## Design Notes",
+        "## Prerequisites",
         "## Implementation Plan",
         "### Milestones",
         "### Tasks",
-        "## Key Performance Indicators",
-        "## Risks",
-        "## Stakeholders",
         "## Results",
-        "## Open Questions",
-        "## Appendix",
     ]
     for section in expected_sections:
         assert section in content, f"Missing section: {section}"

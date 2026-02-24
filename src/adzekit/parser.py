@@ -19,6 +19,17 @@ from adzekit.models import (
 
 # --- Loop parsing ---
 
+# Flat checklist format: - [ ] (SIZE) [DATE] title (DUE-DATE)
+_FLAT_LOOP_RE = re.compile(
+    r"^-\s+\[([ xX])\]\s+"        # checkbox
+    r"(?:\(([A-Z]{1,2})\)\s+)?"   # optional (SIZE)
+    r"(?:\[(\d{4}-\d{2}-\d{2})\]\s+)?"  # optional [DATE created]
+    r"(.+)$"                       # title (rest of line, may end with due date)
+)
+# Trailing due date: (YYYY-MM-DD) at end of title
+_TRAILING_DUE_RE = re.compile(r"\((\d{4}-\d{2}-\d{2})\)\s*$")
+
+# Legacy structured format header: ## [DATE] Title
 _LOOP_HEADER = re.compile(
     r"^##\s+\[(\d{4}-\d{2}-\d{2})\]\s+(.+)$"
 )
@@ -28,12 +39,53 @@ _LOOP_FIELD = re.compile(
 
 
 def parse_loops(text: str) -> list[Loop]:
-    """Parse loops/open.md into Loop objects."""
+    """Parse loops from markdown. Supports both flat checklist and structured formats.
+
+    Flat format:   - [ ] (XS) [2026-02-17] Sync on Altus work
+    Structured:    ## [2026-02-17] Title  + field lines
+    """
     loops: list[Loop] = []
     current: dict | None = None
 
     for line in text.split("\n"):
-        header = _LOOP_HEADER.match(line.strip())
+        stripped = line.strip()
+
+        # Try flat checklist format first
+        flat = _FLAT_LOOP_RE.match(stripped)
+        if flat:
+            # Flush any pending structured loop
+            if current:
+                loops.append(_dict_to_loop(current))
+                current = None
+
+            done = flat.group(1).lower() == "x"
+            size = flat.group(2) or ""
+            loop_date = flat.group(3)
+            title = flat.group(4).strip()
+
+            # Extract trailing due date (YYYY-MM-DD) from title
+            due = None
+            due_match = _TRAILING_DUE_RE.search(title)
+            if due_match:
+                try:
+                    due = date.fromisoformat(due_match.group(1))
+                    title = title[:due_match.start()].strip()
+                except ValueError:
+                    pass
+
+            loops.append(Loop(
+                date=date.fromisoformat(loop_date) if loop_date else date.today(),
+                title=title,
+                who="",
+                what="",
+                due=due,
+                status="Closed" if done else "Open",
+                size=size,
+            ))
+            continue
+
+        # Try structured header format
+        header = _LOOP_HEADER.match(stripped)
         if header:
             if current:
                 loops.append(_dict_to_loop(current))
@@ -44,7 +96,7 @@ def parse_loops(text: str) -> list[Loop]:
             continue
 
         if current is not None:
-            field_match = _LOOP_FIELD.match(line.strip())
+            field_match = _LOOP_FIELD.match(stripped)
             if field_match:
                 key = field_match.group(1).strip().lower()
                 value = field_match.group(2).strip()
@@ -76,24 +128,20 @@ def _dict_to_loop(d: dict) -> Loop:
 
 
 def format_loop(loop: Loop) -> str:
-    """Serialize a Loop back to markdown."""
-    lines = [f"## [{loop.date.isoformat()}] {loop.title}"]
-    lines.append("")
-    lines.append(f"- **Who:** {loop.who}")
-    lines.append(f"- **What:** {loop.what}")
+    """Serialize a Loop to flat checklist markdown with inline date."""
+    check = "[x]" if loop.status.lower() == "closed" else "[ ]"
+    parts = [f"- {check}"]
+    if loop.size:
+        parts.append(f"({loop.size})")
+    parts.append(f"[{loop.date.isoformat()}]")
+    parts.append(loop.title)
     if loop.due:
-        lines.append(f"- **Due:** {loop.due.isoformat()}")
-    lines.append(f"- **Status:** {loop.status}")
-    if loop.next_action:
-        lines.append(f"- **Next:** {loop.next_action}")
-    if loop.project:
-        lines.append(f"- **Project:** {loop.project}")
-    lines.append("")
-    return "\n".join(lines)
+        parts.append(f"({loop.due.isoformat()})")
+    return " ".join(parts)
 
 
 def format_loops(loops: list[Loop]) -> str:
-    """Serialize a list of loops to a full open.md file."""
+    """Serialize a list of loops to markdown lines."""
     return "\n".join(format_loop(l) for l in loops)
 
 

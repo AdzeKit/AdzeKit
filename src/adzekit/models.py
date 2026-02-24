@@ -25,6 +25,7 @@ class Loop:
     status: str = "Open"
     next_action: str = ""
     project: str = ""
+    size: str = ""
 
 
 class ProjectState(str, Enum):

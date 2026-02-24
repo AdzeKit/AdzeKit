@@ -45,15 +45,20 @@ Subdirectories inside `stock/` match project slugs so LLM adapters can find the 
 
 ## Metadata
 
-Files carry no YAML frontmatter. All metadata is derived from the filesystem and git:
+Files carry no YAML frontmatter. All metadata is derived from the filesystem, git, and inline annotations:
 
 - **Identity:** The file path is the unique identifier.
-- **Timestamps:** Creation and modification dates come from git history.
-- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
+- **File timestamps:** Creation and modification dates come from git history. The `git_age` module queries these on demand for staleness tracking in projects and reviews.
+- **Loop timestamps:** Loops carry an inline `[YYYY-MM-DD]` date. The meaning of this date changes over a loop's lifecycle:
+  - In `open.md`, the date is the **creation date** -- stamped when the loop is first added.
+  - When `adzekit sweep` moves a closed loop to `closed.md`, the date is **overwritten with the closure date** (today).
+  - Git history records both transitions: `git log -p -- loops/open.md` shows when the line appeared (creation) and disappeared (sweep); `git log -p -- loops/closed.md` shows when it arrived (closure). The inline date in each file gives the same information without requiring git archaeology.
+  - This dual-use works because a loop only ever lives in one file at a time, and the relevant question differs by context: "how old is this open commitment?" vs "when did I close this?"
+- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). Tags are **case-insensitive** -- `#Citco`, `#citco`, and `#CITCO` all resolve to the same tag (`citco`). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
 
 ### Tag conventions
 
-Tags are a flat namespace. There is no tag registry, no controlled vocabulary, and no separate index file.
+Tags are a flat, case-insensitive namespace. There is no tag registry, no controlled vocabulary, and no separate index file. All tags are lowercased at extraction, so writers never need to worry about casing consistency.
 
 **Why no index?** A maintained tag list rots the moment someone forgets to update it. Instead, the tag index is computed on the fly by scanning every `.md` file for `#word` tokens -- the filesystem is the source of truth. Tooling can build an in-memory `dict[str, list[Path]]` in milliseconds, even at thousands of files.
 
@@ -95,18 +100,47 @@ A loop is any commitment to another person that requires closure.
 
 **Path:** `loops/open.md`
 
-```markdown
-## [YYYY-MM-DD] Loop title
+Loops use a flat checklist format with an inline created date in square brackets:
 
-- **Who:** Person or group
-- **What:** The commitment
-- **Due:** YYYY-MM-DD
-- **Status:** Open | Closed
-- **Next:** Concrete next action
-- **Project:** optional-project-slug
+```markdown
+- [ ] (SIZE) [YYYY-MM-DD] Loop title (DUE-DATE)
 ```
 
-Closed loops move to `loops/closed/YYYY-WNN.md`.
+- `(SIZE)` -- optional t-shirt size (`XS`, `S`, `M`, `L`, `XL`)
+- `[YYYY-MM-DD]` -- the date the loop was created
+- `(YYYY-MM-DD)` at end -- optional due date / deadline
+
+Example:
+
+```markdown
+# Open Loops
+
+- [ ] (XS) [2026-02-17] Follow up with Alice on API estimate
+- [ ] (M) [2026-02-18] Start column mapping work with Jas (2026-03-01)
+- [ ] (S) [2026-02-19] Get Ovintiv docs for gateway diagnosis
+```
+
+### Closing loops
+
+Mark a loop done by flipping `[ ]` to `[x]` in `open.md`, then run `adzekit sweep`. Sweep:
+
+1. Removes all `[x]` lines from `open.md`.
+2. Overwrites each loop's inline `[YYYY-MM-DD]` with today's date (the **closure date**).
+3. Appends them to `closed.md`.
+
+```markdown
+- [x] (L) [2026-02-23] Gartner DSML Survey (2026-02-18)
+```
+
+The original creation date is not lost -- it is preserved in git history as the commit that first added the line to `open.md`. The inline date shifts meaning from "when was this opened?" to "when was this closed?" because the file it lives in already answers which state it's in.
+
+### Loop identity and git traceability
+
+Loops have no stable identifier (no UUID, no sequential number). Their identity is the combination of their title text and creation date. This is a deliberate simplicity trade-off:
+
+- **Reconstructing lifecycle from git:** `git log -p --all -S "Loop title"` will find every commit that added or removed a line containing that title, across all files. This recovers creation, edits, and closure timestamps from commit metadata. The `git_age` module could be extended to automate this.
+- **Fragility:** If a user edits a loop's title (e.g. fixing a typo, adding detail), the old and new versions are different strings. Git diff will show the change within a single commit, but programmatic matching across commits requires fuzzy string comparison -- which AdzeKit does not currently do.
+- **Mitigation:** In practice this works because (a) loops are short-lived commitments, not long-running records, (b) most edits happen before any state transition, and (c) the cost of a broken link in the closed archive is low. If stable identity ever becomes important (e.g. for metrics dashboards), the format can be extended with an inline ID like `{#a1b2c3}` without breaking existing loops.
 
 ## Projects
 
@@ -180,7 +214,7 @@ Zero-structure capture bucket:
 Weekly review output. One file per ISO week.
 
 ```markdown
-# Weekly Review -- 2026 Week 07
+# 2026 Week 07 Review (2026-02-15)
 
 ## Open Loops
 

@@ -61,7 +61,8 @@ class TestParseLoops:
         assert parse_loops("") == []
         assert parse_loops("# Open Loops\n\n") == []
 
-    def test_roundtrip(self):
+    def test_roundtrip_structured(self):
+        """Structured format parses correctly (legacy support)."""
         text = """\
 ## [2026-02-01] Test loop
 
@@ -72,12 +73,37 @@ class TestParseLoops:
 - **Next:** Do the thing
 """
         loops = parse_loops(text)
+        assert len(loops) == 1
+        assert loops[0].title == "Test loop"
+        assert loops[0].who == "Test Person"
+        assert loops[0].due == date(2026, 2, 5)
+
+    def test_roundtrip_flat(self):
+        """Flat format survives format -> parse roundtrip."""
+        text = "- [ ] (M) [2026-02-01] Test loop (2026-02-05)"
+        loops = parse_loops(text)
         output = format_loops(loops)
         reparsed = parse_loops(output)
         assert len(reparsed) == 1
         assert reparsed[0].title == loops[0].title
-        assert reparsed[0].who == loops[0].who
+        assert reparsed[0].date == loops[0].date
         assert reparsed[0].due == loops[0].due
+        assert reparsed[0].size == "M"
+
+    def test_flat_no_size_no_due(self):
+        text = "- [ ] [2026-03-01] Simple loop"
+        loops = parse_loops(text)
+        assert len(loops) == 1
+        assert loops[0].title == "Simple loop"
+        assert loops[0].date == date(2026, 3, 1)
+        assert loops[0].due is None
+        assert loops[0].size == ""
+
+    def test_flat_closed(self):
+        text = "- [x] (S) [2026-02-15] Done task"
+        loops = parse_loops(text)
+        assert len(loops) == 1
+        assert loops[0].status == "Closed"
 
 
 class TestParseTasks:
