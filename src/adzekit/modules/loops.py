@@ -11,7 +11,7 @@ Loop lifecycle:
 
 from datetime import date, timedelta
 
-from adzekit.config import LOOP_SLA_HOURS, Settings, get_settings
+from adzekit.config import Settings, get_settings
 from adzekit.models import Loop
 from adzekit.parser import format_loop, format_loops, parse_loops
 
@@ -118,7 +118,7 @@ def get_overdue_loops(settings: Settings | None = None) -> list[Loop]:
 def get_approaching_sla(settings: Settings | None = None) -> list[Loop]:
     """Return loops nearing the 24-hour SLA window."""
     settings = settings or get_settings()
-    cutoff = date.today() - timedelta(hours=LOOP_SLA_HOURS)
+    cutoff = date.today() - timedelta(hours=settings.loop_sla_hours)
     return [
         l for l in get_open_loops(settings)
         if l.date <= cutoff and l.status.lower() != "closed"

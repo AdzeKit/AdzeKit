@@ -1,20 +1,20 @@
 # AdzeKit Backbone Specification v1
 
-A short, versioned contract. Any folder that conforms to this spec is an AdzeKit-compatible vault. The backbone is a specification, not a codebase.
+A short, versioned contract. Any folder that conforms to this spec is an AdzeKit-compatible shed. The backbone is a specification, not a codebase.
 
-## Vault Layout
+## Shed Layout
 
 ```
-<vault-root>/
+<shed-root>/
+  .adzekit                # marker + config file
   daily/
     YYYY-MM-DD.md
   loops/
     open.md
     closed/
       YYYY-WNN.md
-  projects/
-    active/
-      <slug>.md
+  projects/               # .md files here are active projects
+    <slug>.md
     backlog/
       <slug>.md
     archive/
@@ -27,7 +27,60 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
   stock/                  # git-ignored, synced separately
     <project-slug>/
       <any file>
+  drafts/                 # git-ignored, agent-writable
+    <any file>
 ```
+
+## Access Zones
+
+The shed has two access zones:
+
+### Backbone (human-owned, read-only for agents)
+
+Everything above except `stock/` and `drafts/`. The backbone is the human's domain -- agents can read it but never write to it. All backbone changes go through the human via the CLI or editor.
+
+Backbone directories: `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `inbox.md`.
+
+### Workbench (agent-writable)
+
+Two directories where the agent can freely create and modify files:
+
+- **`stock/`** -- Raw material that hasn't been shaped yet (transcripts, PDFs, exports). Synced via rclone.
+- **`drafts/`** -- Agent-generated proposals awaiting human review. When the agent wants to suggest a new loop, inbox item, or any backbone change, it writes a proposal here. The human reviews and applies (or discards) the draft.
+
+Both directories are git-ignored.
+
+## Marker / Config File
+
+**Path:** `.adzekit`
+
+Every initialized shed contains a `.adzekit` file at the root. It identifies the directory as an AdzeKit shed, declares the backbone spec version, and holds per-shed tuning parameters:
+
+```
+backbone_version = 1
+max_active_projects = 3
+max_daily_tasks = 5
+loop_sla_hours = 24
+stale_loop_days = 7
+rclone_remote = gdrive:adzekit
+```
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `backbone_version` | 1 | Spec version (read-only, set by `init`) |
+| `max_active_projects` | 3 | WIP cap: max projects in `projects/` root |
+| `max_daily_tasks` | 5 | Max intention items per daily note |
+| `loop_sla_hours` | 24 | Hours before a loop is flagged as approaching SLA |
+| `stale_loop_days` | 7 | Days before a loop is flagged as stale |
+| `rclone_remote` | *(empty)* | rclone base path for stock/drafts sync (e.g. `gdrive:adzekit`) |
+| `git_repo` | *(empty)* | Git remote URL for shed sync |
+| `git_branch` | `main` | Git branch for shed sync |
+
+All configuration lives in this single file. Edit values directly to tune the shed. `adzekit init` writes defaults; subsequent `init` calls preserve your edits. `adzekit setup-sync` writes the `rclone_remote` key here.
+
+**Why a marker?** Without it, any mis-configured `ADZEKIT_SHED` path would silently create a full directory tree in the wrong place. The marker is a gate: `adzekit init` writes it, and every other command checks for it before operating. If the marker is missing, the CLI prints an error and exits instead of creating files.
+
+The version number allows future spec revisions to detect and migrate older sheds. There is no migration logic today -- version 1 is the only version.
 
 ## File Encoding
 
@@ -39,9 +92,17 @@ All files are UTF-8 Markdown. No proprietary formats.
 
 Raw material that hasn't been shaped yet -- transcripts, PDFs, spreadsheets, exports, recordings. The name follows the woodworking metaphor: stock is the unworked lumber that the adze shapes into the finished piece.
 
-Stock is **not tracked by git**. These files are often large, binary, or in proprietary formats -- none of which git handles well. Instead, `stock/` syncs via rclone to a cloud remote (Google Drive, SharePoint, S3, etc.). Set `ADZEKIT_RCLONE_REMOTE` to configure the remote.
+Stock is **not tracked by git**. These files are often large, binary, or in proprietary formats -- none of which git handles well. Instead, `stock/` syncs via rclone to a cloud remote (Google Drive, SharePoint, S3, etc.). Set `rclone_remote` in `.adzekit` (or run `adzekit setup-sync`) to configure the remote.
 
 Subdirectories inside `stock/` match project slugs so LLM adapters can find the raw material for a given project and summarize it into that project's `## Log`.
+
+## Drafts
+
+**Path:** `drafts/`
+
+Agent-generated proposals awaiting human review. The agent writes here when it wants to suggest changes to the backbone (new loops, inbox items, triage summaries, etc.). The human reviews each draft and either applies it to the backbone or discards it.
+
+Drafts are **not tracked by git**. They are ephemeral by nature -- once applied or discarded, they can be deleted.
 
 ## Metadata
 
@@ -71,7 +132,7 @@ Tags are a flat, case-insensitive namespace. There is no tag registry, no contro
 
 If programmatic classification is ever needed, the tooling layer can infer type from pattern (names vs concepts vs IDs) without burdening the writer.
 
-**Contacts are just tags.** There is no separate contacts system. Mention `#firstname-lastname` wherever a person appears -- in daily notes, loops, project logs. Querying the tag index for that tag produces a complete interaction history across the vault.
+**Contacts are just tags.** There is no separate contacts system. Mention `#firstname-lastname` wherever a person appears -- in daily notes, loops, project logs. Querying the tag index for that tag produces a complete interaction history across the shed.
 
 ## Daily Notes
 
@@ -265,7 +326,7 @@ Pandoc is an external dependency (`brew install pandoc`) and is not bundled with
 
 ## What This Spec Does Not Cover
 
-- Where the vault lives (local, git, Dropbox -- user's choice)
+- Where the shed lives (local, git, Dropbox -- user's choice)
 - Which editor is used (Obsidian, VS Code, Vim -- all work)
 - How tools are run (CLI, UI, scripts -- package concern)
 - AI behavior (tool concern, not backbone concern)

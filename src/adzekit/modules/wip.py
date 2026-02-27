@@ -15,7 +15,7 @@ The LLM can draft answers; the human decides.
 
 from pathlib import Path
 
-from adzekit.config import MAX_ACTIVE_PROJECTS, MAX_DAILY_TASKS, Settings, get_settings
+from adzekit.config import Settings, get_settings
 from adzekit.models import ProjectState
 from adzekit.preprocessor import load_daily_note, load_projects
 
@@ -50,12 +50,13 @@ def can_activate(settings: Settings | None = None) -> tuple[bool, str]:
     """
     settings = settings or get_settings()
     n = count_active_projects(settings)
-    if n >= MAX_ACTIVE_PROJECTS:
+    cap = settings.max_active_projects
+    if n >= cap:
         return False, (
-            f"WIP limit reached: {n}/{MAX_ACTIVE_PROJECTS} active projects. "
+            f"WIP limit reached: {n}/{cap} active projects. "
             "Archive or complete a project before activating a new one."
         )
-    return True, f"WIP OK: {n}/{MAX_ACTIVE_PROJECTS} active slots used."
+    return True, f"WIP OK: {n}/{cap} active slots used."
 
 
 def activate_project(project_slug: str, settings: Settings | None = None) -> Path:
@@ -96,11 +97,13 @@ def wip_status(settings: Settings | None = None) -> dict:
     settings = settings or get_settings()
     active = count_active_projects(settings)
     daily = count_daily_tasks(settings)
+    max_proj = settings.max_active_projects
+    max_tasks = settings.max_daily_tasks
     return {
         "active_projects": active,
-        "max_active_projects": MAX_ACTIVE_PROJECTS,
-        "projects_available": MAX_ACTIVE_PROJECTS - active,
+        "max_active_projects": max_proj,
+        "projects_available": max_proj - active,
         "daily_tasks": daily,
-        "max_daily_tasks": MAX_DAILY_TASKS,
-        "daily_available": MAX_DAILY_TASKS - daily,
+        "max_daily_tasks": max_tasks,
+        "daily_available": max_tasks - daily,
     }

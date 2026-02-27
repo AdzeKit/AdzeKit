@@ -1,6 +1,6 @@
-"""Workspace initialization and management.
+"""Shed initialization and management.
 
-Creates the v1 directory tree, seeds template files, and validates workspace health.
+Creates the v1 directory tree, seeds template files, and validates shed health.
 """
 
 from datetime import date
@@ -9,14 +9,15 @@ from pathlib import Path
 from adzekit.config import Settings, get_settings
 
 
-def init_workspace(settings: Settings | None = None) -> Path:
-    """Create or verify the AdzeKit workspace directory tree.
+def init_shed(settings: Settings | None = None) -> Path:
+    """Create or verify the AdzeKit shed directory tree.
 
-    Seeds example files for every backbone file type on first run.
-    Returns the workspace root path.
+    Writes the .adzekit marker file and seeds example files for every
+    backbone file type on first run.  Returns the shed root path.
     """
     settings = settings or get_settings()
-    settings.ensure_workspace()
+    settings.write_marker()
+    settings.ensure_shed()
     today = date.today()
     iso = today.isoformat()
 
@@ -45,8 +46,8 @@ Capture anything here. No structure needed.
     # Seed today's daily note
     create_daily_note(today, settings)
 
-    # Seed one active project if active/ is empty
-    if not any(settings.active_dir.iterdir()):
+    # Seed one active project if projects/ has no .md files
+    if not any(f for f in settings.active_dir.iterdir() if f.is_file() and f.suffix == ".md"):
         create_project("example-project", title="Example Project", backlog=False, settings=settings)
 
     # Seed one weekly review if reviews/ is empty
@@ -57,7 +58,7 @@ Capture anything here. No structure needed.
     if not any(settings.knowledge_dir.iterdir()):
         _seed_knowledge_note(settings)
 
-    return settings.workspace
+    return settings.shed
 
 
 def create_review(
@@ -87,7 +88,7 @@ def create_review(
 - For each: act on it, schedule it, or close it
 
 ## Active Projects
-- Check progress on each project in `projects/active/`
+- Check progress on each project in `projects/`
 - Any project stale for >7 days? Kill, defer, or commit.
 
 ## Decisions

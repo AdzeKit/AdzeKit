@@ -10,7 +10,7 @@ Every backbone convention and every package feature traces back to one of these 
 
 **The rule:** Maximum 3 active projects. Maximum 5 daily focus tasks. No exceptions -- only trade-offs.
 
-**How AdzeKit enforces it:** The backbone limits `projects/active/` to 3 directories. The `wip` module maintains a physical WIP count. New work cannot enter "active" status until something exits. The LLM acts as a gatekeeper, running a 4-question filter before any new commitment is accepted.
+**How AdzeKit enforces it:** The backbone limits `projects/active/` to 3 files. The `wip` module maintains a physical WIP count. New work cannot enter "active" status until something exits. The LLM acts as a gatekeeper, running a 4-question filter before any new commitment is accepted.
 
 ## Principle 2: Close Every Loop
 

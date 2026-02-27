@@ -56,7 +56,7 @@ def _git_date(args: list[str], cwd: Path) -> date | None:
 def file_age(path: Path, settings: Settings | None = None) -> FileAge:
     """Get git-derived creation and modification dates for a file."""
     settings = settings or get_settings()
-    cwd = settings.workspace
+    cwd = settings.shed
     rel = path.relative_to(cwd) if path.is_absolute() else path
 
     created = _git_date(
@@ -74,7 +74,7 @@ def project_ages(settings: Settings | None = None) -> list[FileAge]:
     """Get ages for all project files, sorted oldest-modified first."""
     settings = settings or get_settings()
     ages = []
-    for d in [settings.projects_dir, settings.active_dir, settings.backlog_dir]:
+    for d in [settings.active_dir, settings.backlog_dir]:
         if not d.exists():
             continue
         for f in sorted(d.glob("*.md")):

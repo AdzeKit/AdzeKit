@@ -1,27 +1,42 @@
-"""AdzeKit CLI -- command-line interface for operating on any backbone-conforming vault.
+"""AdzeKit CLI -- command-line interface for operating on any backbone-conforming shed.
 
 Usage:
-    adzekit init [path]          Initialize a new vault at path (default: cwd)
+    adzekit init [path]          Initialize a new shed at path (default: cwd)
     adzekit today                Open or create today's daily note
     adzekit add-loop             Add a loop to open.md
-    adzekit status               Show vault health summary
+    adzekit status               Show shed health summary
+    adzekit sync [pull|push]     Sync stock/ and drafts/ via rclone
+    adzekit setup-sync           Configure rclone for Google Drive sync
+    adzekit serve                Start the local web UI
+    adzekit agent <message>      Run the agent with a one-shot message
 """
 
 import argparse
+import os
+import shutil
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
 
 
-def _resolve_settings(args: argparse.Namespace):
-    """Build a Settings instance from CLI args."""
+def _resolve_settings(args: argparse.Namespace, *, require_init: bool = True):
+    """Build a Settings instance from CLI args.
+
+    When require_init is True (the default), raises ShedNotInitializedError
+    if the resolved shed directory does not contain a .adzekit marker file.
+    Only ``init`` and ``adze`` should pass require_init=False.
+    """
     from adzekit.config import Settings
 
     kwargs: dict = {}
-    vault = getattr(args, "vault", None)
-    if vault:
-        kwargs["workspace"] = Path(vault).expanduser().resolve()
-    return Settings(**kwargs)
+    shed = getattr(args, "shed", None)
+    if shed:
+        kwargs["shed"] = Path(shed).expanduser().resolve()
+    settings = Settings(**kwargs)
+    if require_init:
+        settings.require_initialized()
+    return settings
 
 
 ADZE = r"""
@@ -46,16 +61,16 @@ def cmd_adze(args: argparse.Namespace) -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Initialize a new AdzeKit vault with the full backbone structure."""
+    """Initialize a new AdzeKit shed with the full backbone structure."""
     from adzekit.config import Settings
-    from adzekit.workspace import init_workspace
+    from adzekit.workspace import init_shed
 
     path = Path(args.path).expanduser().resolve() if args.path else Path.cwd()
-    settings = Settings(workspace=path)
-    root = init_workspace(settings)
+    settings = Settings(shed=path)
+    root = init_shed(settings)
 
     # Print the tree that was created
-    print(f"Initialized AdzeKit vault at {root}\n")
+    print(f"Initialized AdzeKit shed at {root}\n")
     _print_tree(root, root)
 
 
@@ -194,7 +209,7 @@ def cmd_tags(args: argparse.Namespace) -> None:
         tag = args.search.lstrip("#").lower()
         print(f"#{tag} ({len(files)} files):")
         for f in files:
-            print(f"  {f.relative_to(settings.workspace)}")
+            print(f"  {f.relative_to(settings.shed)}")
         return
 
     tags = all_tags(settings)
@@ -256,14 +271,14 @@ def cmd_export(args: argparse.Namespace) -> None:
 
     settings = _resolve_settings(args)
     raw = Path(args.file)
-    # Resolve relative paths against the vault root
-    source = raw if raw.is_absolute() else (settings.workspace / raw)
+    # Resolve relative paths against the shed root
+    source = raw if raw.is_absolute() else (settings.shed / raw)
     source = source.expanduser().resolve()
 
     output = None
     if args.output:
         raw_out = Path(args.output)
-        output = raw_out if raw_out.is_absolute() else (settings.workspace / raw_out)
+        output = raw_out if raw_out.is_absolute() else (settings.shed / raw_out)
         output = output.expanduser().resolve()
 
     docx_path = to_docx(source, output)
@@ -274,7 +289,7 @@ def cmd_export(args: argparse.Namespace) -> None:
 
 
 def cmd_status(args: argparse.Namespace) -> None:
-    """Print a summary of vault health."""
+    """Print a summary of shed health."""
     from adzekit.modules.git_age import project_ages
     from adzekit.modules.loops import loop_stats
     from adzekit.modules.wip import wip_status
@@ -283,7 +298,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     wip = wip_status(settings)
     loops = loop_stats(settings)
 
-    print(f"Vault: {settings.workspace}")
+    print(f"Shed: {settings.shed}")
     print(f"Active projects: {wip['active_projects']}/{wip['max_active_projects']}")
     print(f"Daily tasks: {wip['daily_tasks']}/{wip['max_daily_tasks']}")
     print(f"Open loops: {loops['open']}")
@@ -300,6 +315,120 @@ def cmd_status(args: argparse.Namespace) -> None:
             print(f"  {name}: modified {stale}" + (f", {created}" if created else ""))
 
 
+# -- serve -----------------------------------------------------------------
+
+
+def cmd_serve(args: argparse.Namespace) -> None:
+    """Start the local web UI."""
+    import uvicorn
+
+    print(f"Starting AdzeKit UI at http://{args.host}:{args.port}")
+    uvicorn.run(
+        "adzekit.ui.app:app",
+        host=args.host,
+        port=args.port,
+        reload=False,
+    )
+
+
+# -- agent -----------------------------------------------------------------
+
+
+def cmd_agent(args: argparse.Namespace) -> None:
+    """Run the agent with a one-shot message."""
+    # Import tools to register them
+    import adzekit.agent.gmail_tools  # noqa: F401
+    import adzekit.agent.shed_tools  # noqa: F401
+    from adzekit.agent.orchestrator import run_agent
+
+    print(f"Agent processing: {args.message}\n")
+    try:
+        result = run_agent(args.message)
+        print(result.response)
+        if result.tool_calls_made > 0:
+            print(f"\n({result.tool_calls_made} tool calls made across {len(result.turns)} turns)")
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+
+# -- sync ------------------------------------------------------------------
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    """Sync stock/ and drafts/ with the rclone remote."""
+    settings = _resolve_settings(args)
+
+    direction = getattr(args, "direction", None)
+
+    if direction in (None, "pull"):
+        print("Pulling stock/ and drafts/ from remote...")
+        settings.sync_workbench()
+        if direction == "pull":
+            print("Pull complete.")
+            return
+
+    if direction in (None, "push"):
+        print("Pushing stock/ and drafts/ to remote...")
+        settings.push_workbench()
+        if direction == "push":
+            print("Push complete.")
+            return
+
+    print("Sync complete (pull + push).")
+
+
+# -- setup-sync ------------------------------------------------------------
+
+
+def cmd_setup_sync(args: argparse.Namespace) -> None:
+    """Guide the user through setting up rclone for Google Drive sync."""
+    settings = _resolve_settings(args)
+
+    # Step 1: Check rclone is installed
+    if shutil.which("rclone") is None:
+        print("rclone is not installed.")
+        print("  macOS:  brew install rclone")
+        print("  Linux:  curl https://rclone.org/install.sh | sudo bash")
+        print("\nInstall rclone, then re-run: adzekit setup-sync")
+        raise SystemExit(1)
+
+    print("rclone found.\n")
+
+    # Step 2: Check if a remote named 'gdrive' already exists
+    result = subprocess.run(
+        ["rclone", "listremotes"],
+        capture_output=True, text=True,
+    )
+    existing_remotes = [r.rstrip(":") for r in result.stdout.strip().splitlines()]
+
+    remote_name = args.remote or "gdrive"
+
+    if remote_name not in existing_remotes:
+        print(f"No rclone remote named '{remote_name}' found.")
+        print(f"\nRun the following to create one:\n")
+        print(f"  rclone config create {remote_name} drive\n")
+        print("This will open a browser for Google OAuth.")
+        print(f"Once done, re-run: adzekit setup-sync --remote {remote_name}")
+        raise SystemExit(1)
+
+    print(f"rclone remote '{remote_name}' found.\n")
+
+    # Step 3: Determine the remote folder path
+    folder = args.folder or "adzekit"
+    remote_path = f"{remote_name}:{folder}"
+
+    print(f"Remote base path: {remote_path}")
+    print(f"  stock/  -> {remote_path}/stock")
+    print(f"  drafts/ -> {remote_path}/drafts\n")
+
+    # Step 4: Save to .adzekit config
+    settings.set_config("rclone_remote", remote_path)
+
+    print(f"Saved rclone_remote = {remote_path} to {settings.marker_path}")
+    print(f"\nSetup complete. Run 'adzekit sync' to sync stock/ and drafts/.")
+
+
 # -- parser ----------------------------------------------------------------
 
 
@@ -309,8 +438,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="AdzeKit -- prehistoric tools, modern brains.",
     )
     parser.add_argument(
-        "--vault",
-        help="Path to the vault (overrides ADZEKIT_WORKSPACE).",
+        "--shed",
+        help="Path to the shed (overrides ADZEKIT_SHED).",
         default=None,
     )
 
@@ -321,7 +450,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_adze.set_defaults(func=cmd_adze)
 
     # init
-    p_init = sub.add_parser("init", help="Initialize a new vault.")
+    p_init = sub.add_parser("init", help="Initialize a new shed.")
     p_init.add_argument(
         "path",
         nargs="?",
@@ -371,7 +500,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_project.set_defaults(func=cmd_project)
 
     # status
-    p_status = sub.add_parser("status", help="Show vault health summary.")
+    p_status = sub.add_parser("status", help="Show shed health summary.")
     p_status.set_defaults(func=cmd_status)
 
     # poc-init
@@ -386,13 +515,55 @@ def build_parser() -> argparse.ArgumentParser:
 
     # export
     p_export = sub.add_parser("export", help="Export a markdown file to docx.")
-    p_export.add_argument("file", help="Path to the markdown file (relative to vault root, or absolute).")
+    p_export.add_argument("file", help="Path to the markdown file (relative to shed root, or absolute).")
     p_export.add_argument(
         "-o", "--output",
         default=None,
-        help="Output path, relative to vault root or absolute (default: same directory, .docx extension).",
+        help="Output path, relative to shed root or absolute (default: same directory, .docx extension).",
     )
     p_export.set_defaults(func=cmd_export)
+
+    # sync
+    p_sync = sub.add_parser("sync", help="Sync stock/ and drafts/ via rclone.")
+    p_sync.add_argument(
+        "direction",
+        nargs="?",
+        choices=["pull", "push"],
+        default=None,
+        help="Sync direction (default: pull then push).",
+    )
+    p_sync.set_defaults(func=cmd_sync)
+
+    # setup-sync
+    p_setup = sub.add_parser("setup-sync", help="Configure rclone for Google Drive sync.")
+    p_setup.add_argument(
+        "--remote",
+        default=None,
+        help="rclone remote name (default: gdrive).",
+    )
+    p_setup.add_argument(
+        "--folder",
+        default=None,
+        help="Folder path on the remote (default: adzekit).",
+    )
+    p_setup.set_defaults(func=cmd_setup_sync)
+
+    # serve
+    p_serve = sub.add_parser("serve", help="Start the local web UI.")
+    p_serve.add_argument(
+        "--port", type=int, default=8742,
+        help="Port to serve on (default: 8742).",
+    )
+    p_serve.add_argument(
+        "--host", default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1).",
+    )
+    p_serve.set_defaults(func=cmd_serve)
+
+    # agent
+    p_agent = sub.add_parser("agent", help="Run the agent with a one-shot message.")
+    p_agent.add_argument("message", help="Message to send to the agent.")
+    p_agent.set_defaults(func=cmd_agent)
 
     # tags
     p_tags = sub.add_parser("tags", help="List, search, or autocomplete tags.")
@@ -413,9 +584,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from adzekit.config import ShedNotInitializedError
+
     parser = build_parser()
     args = parser.parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except ShedNotInitializedError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    except (ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
