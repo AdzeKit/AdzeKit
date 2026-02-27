@@ -1,6 +1,6 @@
 """Tag extraction and indexing.
 
-Scans all markdown files in the vault for inline #tags and builds an
+Scans all markdown files in the shed for inline #tags and builds an
 in-memory index. No separate tag registry -- the filesystem is the
 source of truth.
 """
@@ -25,16 +25,22 @@ def extract_tags(text: str) -> set[str]:
 def tag_index(settings: Settings | None = None) -> dict[str, list[Path]]:
     """Build a mapping from tag -> list of files that contain it.
 
-    Scans every ``.md`` file in the workspace (excluding ``stock/``).
+    Scans every ``.md`` file in the shed (excluding ``stock/`` and ``drafts/``).
     """
     settings = settings or get_settings()
     index: dict[str, list[Path]] = {}
     stock = settings.stock_dir
+    drafts = settings.drafts_dir
 
-    for md in sorted(settings.workspace.rglob("*.md")):
-        # Skip stock/ -- not part of the backbone
+    for md in sorted(settings.shed.rglob("*.md")):
+        # Skip stock/ and drafts/ -- not part of the backbone
         try:
             md.relative_to(stock)
+            continue
+        except ValueError:
+            pass
+        try:
+            md.relative_to(drafts)
             continue
         except ValueError:
             pass
@@ -62,14 +68,14 @@ def tags_for_file(path: Path) -> set[str]:
 
 
 def all_tags(settings: Settings | None = None) -> list[str]:
-    """Return a sorted list of every tag in the vault."""
+    """Return a sorted list of every tag in the shed."""
     return sorted(tag_index(settings).keys())
 
 
 def generate_cursor_snippets(settings: Settings | None = None) -> Path:
     """Generate a .vscode/adzekit.code-snippets file for tag autocomplete.
 
-    Each tag in the vault becomes a snippet triggered by typing ``#``.
+    Each tag in the shed becomes a snippet triggered by typing ``#``.
     Returns the path to the generated file.
     """
     settings = settings or get_settings()
@@ -84,7 +90,7 @@ def generate_cursor_snippets(settings: Settings | None = None) -> Path:
             "description": f"AdzeKit tag: #{tag}",
         }
 
-    vscode_dir = settings.workspace / ".vscode"
+    vscode_dir = settings.shed / ".vscode"
     vscode_dir.mkdir(exist_ok=True)
     snippets_path = vscode_dir / "adzekit.code-snippets"
     snippets_path.write_text(

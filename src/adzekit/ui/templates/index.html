@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title_suffix %} - Dashboard{% endblock %}
+
+{% block content %}
+<h1>// dashboard</h1>
+
+<div class="grid" id="stats-grid">
+    <div class="card">
+        <h3>Active Projects</h3>
+        <div class="stat" id="stat-projects">--</div>
+        <div class="stat-label" id="stat-projects-label">loading...</div>
+    </div>
+    <div class="card">
+        <h3>Open Loops</h3>
+        <div class="stat" id="stat-loops">--</div>
+        <div class="stat-label" id="stat-loops-label">loading...</div>
+    </div>
+    <div class="card">
+        <h3>Daily Tasks</h3>
+        <div class="stat" id="stat-tasks">--</div>
+        <div class="stat-label" id="stat-tasks-label">loading...</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+    <h3>Open Loops</h3>
+    <table id="loops-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Created</th>
+                <th>Size</th>
+                <th>Due</th>
+            </tr>
+        </thead>
+        <tbody id="loops-body">
+            <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Projects</h3>
+    <table id="projects-table">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>State</th>
+                <th>Progress</th>
+            </tr>
+        </thead>
+        <tbody id="projects-body">
+            <tr><td colspan="3" class="empty-state">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+    try {
+        const [statusRes, loopsRes, projectsRes] = await Promise.all([
+            fetch('/api/status'),
+            fetch('/api/loops'),
+            fetch('/api/projects'),
+        ]);
+
+        const status = await statusRes.json();
+        const loops = await loopsRes.json();
+        const projects = await projectsRes.json();
+
+        // Stats
+        const projEl = document.getElementById('stat-projects');
+        projEl.textContent = `${status.active_projects}/${status.max_active_projects}`;
+        projEl.className = 'stat ' + (status.active_projects >= status.max_active_projects ? 'warn' : 'ok');
+        document.getElementById('stat-projects-label').textContent = 'active / max';
+
+        const loopEl = document.getElementById('stat-loops');
+        loopEl.textContent = status.open_loops;
+        loopEl.className = 'stat ' + (status.overdue_loops > 0 ? 'danger' : 'ok');
+        document.getElementById('stat-loops-label').textContent =
+            status.overdue_loops > 0 ? `${status.overdue_loops} overdue` : 'all current';
+
+        const taskEl = document.getElementById('stat-tasks');
+        taskEl.textContent = `${status.daily_tasks}/${status.max_daily_tasks}`;
+        taskEl.className = 'stat ' + (status.daily_tasks > status.max_daily_tasks ? 'warn' : 'ok');
+        document.getElementById('stat-tasks-label').textContent = 'today / max';
+
+        // Loops table
+        const loopsBody = document.getElementById('loops-body');
+        if (loops.length === 0) {
+            loopsBody.innerHTML = '<tr><td colspan="4" class="empty-state">No open loops.</td></tr>';
+        } else {
+            loopsBody.innerHTML = loops.map(l => `
+                <tr>
+                    <td>${escapeHtml(l.title)}</td>
+                    <td style="font-family: var(--mono); font-size: 0.85rem; color: var(--text-muted);">${l.date}</td>
+                    <td>${l.size ? `<span class="badge badge-size">${l.size}</span>` : ''}</td>
+                    <td style="font-family: var(--mono); font-size: 0.85rem;">${l.due || ''}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Projects table
+        const projectsBody = document.getElementById('projects-body');
+        if (projects.length === 0) {
+            projectsBody.innerHTML = '<tr><td colspan="3" class="empty-state">No projects.</td></tr>';
+        } else {
+            projectsBody.innerHTML = projects.map(p => `
+                <tr>
+                    <td>${escapeHtml(p.title)}</td>
+                    <td><span class="badge badge-${p.state}">${p.state}</span></td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="progress-bar" style="flex: 1;">
+                                <div class="progress-bar-fill" style="width: ${p.progress * 100}%"></div>
+                            </div>
+                            <span style="font-family: var(--mono); font-size: 0.8rem; color: var(--text-muted);">
+                                ${p.done_tasks}/${p.total_tasks}
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (err) {
+        console.error('Failed to load dashboard:', err);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+loadDashboard();
+</script>
+{% endblock %}

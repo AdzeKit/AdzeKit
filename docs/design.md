@@ -6,27 +6,40 @@ For the backbone spec: [../backbone-spec/schema.md](../backbone-spec/schema.md).
 
 ```
 +---------------------------------------------+
+|  AI Layer (agent/)                           |
++---------------------------------------------+
 |  Feature Layer (modules/)                    |
 +---------------------------------------------+
 |  Access Layer (config, models, parser,       |
 |                preprocessor, workspace)       |
 +---------------------------------------------+
-|  Backbone (user's vault)                     |
+|  Backbone (user's shed)                      |
 +---------------------------------------------+
 ```
 
-**Access Layer** -- Knows the backbone schema. All markdown I/O lives here. `config.py` resolves the vault path. `parser.py` reads/writes markdown. `models.py` defines data structures. `preprocessor.py` loads files into typed objects.
+**Access Layer** -- Knows the backbone schema. All markdown I/O lives here. `config.py` resolves the shed path. `parser.py` reads/writes markdown. `models.py` defines data structures. `preprocessor.py` loads files into typed objects.
 
 **Feature Layer** (`modules/`) -- Implements commands using access layer primitives. `loops.py` manages the loop lifecycle. `wip.py` enforces WIP limits. `git_age.py` queries git for file-level timestamps. `tags.py` scans for inline `#tags`.
 
-## Vault Discovery
+**AI Layer** (`agent/`) -- LLM client, tool registry, and orchestrator. The agent can READ the backbone but CANNOT WRITE to it. Agent output goes to `drafts/` and `stock/` (the workbench).
 
-1. Explicit `Settings(workspace=...)` in code
-2. `ADZEKIT_WORKSPACE` environment variable
+## Shed Discovery
+
+1. Explicit `Settings(shed=...)` in code
+2. `ADZEKIT_SHED` environment variable
 3. `.env` file
 4. Default: `~/adzekit`
 
-When `ADZEKIT_GIT_REPO` is set, `sync_workspace()` clones or pulls, `commit_workspace()` pushes.
+When `ADZEKIT_GIT_REPO` is set, `sync_shed()` clones or pulls, `commit_shed()` pushes.
+
+## Access Zones
+
+The shed has two access zones:
+
+- **Backbone** (human-owned): `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `inbox.md`. The agent reads but never writes.
+- **Workbench** (agent-writable): `stock/` (raw materials) and `drafts/` (proposals awaiting human review). Both are git-ignored.
+
+When the agent wants to suggest a backbone change (new loop, inbox item, etc.), it writes a proposal to `drafts/`. The human reviews and applies or discards.
 
 ## Metadata
 
@@ -64,7 +77,7 @@ Loops have no stable identifier -- no UUID, no auto-incrementing number. Identit
 
 **Why this is acceptable:** Loops are meant to be short-lived commitments (hours to days, not months). Most title edits happen right after creation, before any state transitions. The closed archive is a reference log, not an audit trail -- if a link between an open and closed loop is lost because of a rename, the practical cost is negligible.
 
-**Escape hatch:** If stable identity ever becomes important (e.g. for cycle-time metrics or compliance tracking), the format can be extended with an inline hash like `{#a1b2}` after the title. The parser and `format_loop` would need a one-line addition, and existing loops without IDs would still parse correctly. This is deferred because the added friction is not worth the benefit for most vaults.
+**Escape hatch:** If stable identity ever becomes important (e.g. for cycle-time metrics or compliance tracking), the format can be extended with an inline hash like `{#a1b2}` after the title. The parser and `format_loop` would need a one-line addition, and existing loops without IDs would still parse correctly. This is deferred because the added friction is not worth the benefit for most sheds.
 
 ### Tags at scale
 
@@ -92,6 +105,12 @@ Stock is git-ignored because these files are typically large, binary, or in prop
 
 Subdirectories inside `stock/` match project slugs (`stock/otpp-vectorsearch/`). This gives LLM adapters a clear input path: read from `stock/<slug>/`, summarize into the project's `## Log`.
 
+## Drafts
+
+The `drafts/` directory is the agent's output area. When the agent wants to propose a backbone change -- a new loop, an inbox item, a triage summary -- it writes a proposal file here. The human reviews each draft and either applies it (copying content into the appropriate backbone file) or discards it.
+
+Drafts are git-ignored and ephemeral. They are not part of the backbone spec.
+
 ## Estimation
 
 AdzeKit uses t-shirt sizes -- `(S)`, `(M)`, `(L)`, `(XL)` -- appended to tasks for relative effort. No story points or hour tracking; just enough signal to eyeball whether a week is overloaded. Tasks can also carry inline deadlines as `(YYYY-MM-DD)` when tied to hard dates. Both annotations are optional. Estimation tooling will parse these markers to surface workload summaries and forecast throughput.
@@ -106,4 +125,4 @@ For Google Docs: export to `.docx`, then upload -- Google Drive auto-converts `.
 
 ## Testing
 
-Tests use `pytest` with a `workspace` fixture that creates a temporary vault in `tmp_path`. No mocks for file I/O.
+Tests use `pytest` with a `workspace` fixture that creates a temporary shed in `tmp_path`. No mocks for file I/O.

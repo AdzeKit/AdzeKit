@@ -10,12 +10,12 @@ A **loop** is any commitment that would continue to nag at you if you didn't wri
 
 ## Two Things
 
-**The Backbone** -- a specification for how your vault is organized. Folder layout, file naming, inline `#tags`. No YAML frontmatter -- just plain markdown. Any folder that follows the spec is a vault. See [backbone-spec/schema.md](backbone-spec/schema.md).
+**The Backbone** -- a specification for how your shed is organized. Folder layout, file naming, inline `#tags`. No YAML frontmatter -- just plain markdown. Any folder that follows the spec is a shed. See [backbone-spec/schema.md](backbone-spec/schema.md).
 
-**The Package** -- Python tools that operate on any conforming vault. Point it at a folder and go.
+**The Package** -- Python tools that operate on any conforming shed. Point it at a folder and go.
 
 ```bash
-export ADZEKIT_WORKSPACE=~/my-vault
+export ADZEKIT_SHED=~/my-shed
 adzekit today
 ```
 
@@ -23,10 +23,10 @@ adzekit today
 
 ```bash
 uv pip install -e ".[dev]"
-uv run adzekit init ~/my-vault
-uv run adzekit --vault ~/my-vault today
-uv run adzekit --vault ~/my-vault add-loop "Send estimate" --who Alice --what "API estimate"
-uv run adzekit --vault ~/my-vault status
+uv run adzekit init ~/my-shed
+uv run adzekit --shed ~/my-shed today
+uv run adzekit --shed ~/my-shed add-loop "Send estimate" --who Alice --what "API estimate"
+uv run adzekit --shed ~/my-shed status
 uv run pytest
 ```
 
@@ -36,7 +36,7 @@ Settings come from environment variables (prefixed `ADZEKIT_`) or a `.env` file:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ADZEKIT_WORKSPACE` | `~/adzekit` | Vault path |
+| `ADZEKIT_SHED` | `~/adzekit` | Shed path |
 | `ADZEKIT_GIT_REPO` | -- | Git remote URL (optional) |
 | `ADZEKIT_GIT_BRANCH` | `main` | Branch to sync |
 

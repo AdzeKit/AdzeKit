@@ -1,6 +1,6 @@
 """Markdown-to-docx export via Pandoc.
 
-Converts any markdown file in the vault to .docx format using a
+Converts any markdown file in the shed to .docx format using a
 custom reference document styled with DM Sans. Requires pandoc to
 be installed and available on PATH.
 """
