@@ -34,6 +34,8 @@ dev = [
 
 [project.scripts]
 adzekit = "adzekit.cli:main"
+adzekit-mcp-gmail = "adzekit.mcp.gmail_server:main"
+adzekit-mcp-backbone = "adzekit.mcp.backbone_server:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,15 +1,17 @@
 """AdzeKit local web UI.
 
 A FastAPI application that serves a dashboard for shed status,
-open loops, projects, and an agent chat interface.
+open loops, projects, and an agent chat interface. Also provides
+a file editor for direct manipulation of backbone markdown files.
 
 Run with: adzekit serve
 """
 
+import re
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,13 +38,13 @@ def _settings() -> Settings:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Dashboard page."""
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "index.html", {"active_page": "dashboard"})
 
 
 @app.get("/agent", response_class=HTMLResponse)
 async def agent_page(request: Request):
     """Agent chat page."""
-    return templates.TemplateResponse(request, "agent.html")
+    return templates.TemplateResponse(request, "agent.html", {"active_page": "agent"})
 
 
 # -- API endpoints -----------------------------------------------------------
@@ -162,6 +164,248 @@ async def api_agent_chat(request: Request):
             {"error": f"{type(exc).__name__}: {exc}"},
             status_code=500,
         )
+
+
+# -- Backbone editor pages ---------------------------------------------------
+
+EDITOR_SECTIONS = {
+    "daily": "Daily Notes",
+    "loops": "Loops",
+    "projects": "Projects",
+    "reviews": "Reviews",
+    "inbox": "Inbox",
+}
+
+
+@app.get("/daily", response_class=HTMLResponse)
+async def daily_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "editor.html",
+        {"active_page": "daily", "section": "daily", "section_title": "Daily Notes"},
+    )
+
+
+@app.get("/loops", response_class=HTMLResponse)
+async def loops_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "editor.html",
+        {"active_page": "loops", "section": "loops", "section_title": "Loops"},
+    )
+
+
+@app.get("/projects", response_class=HTMLResponse)
+async def projects_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "editor.html",
+        {"active_page": "projects", "section": "projects", "section_title": "Projects"},
+    )
+
+
+@app.get("/reviews", response_class=HTMLResponse)
+async def reviews_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "editor.html",
+        {"active_page": "reviews", "section": "reviews", "section_title": "Reviews"},
+    )
+
+
+@app.get("/inbox", response_class=HTMLResponse)
+async def inbox_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "editor.html",
+        {"active_page": "inbox", "section": "inbox", "section_title": "Inbox"},
+    )
+
+
+# -- File API: list, read, write --------------------------------------------
+
+
+def _validate_section(section: str) -> None:
+    if section not in EDITOR_SECTIONS:
+        raise HTTPException(status_code=404, detail=f"Unknown section: {section}")
+
+
+def _resolve_file(section: str, name: str, settings: Settings) -> Path:
+    """Resolve a relative filename to an absolute path within the section,
+    with validation to prevent path traversal."""
+    base = {
+        "daily": settings.daily_dir,
+        "loops": settings.loops_dir,
+        "projects": settings.projects_dir,
+        "reviews": settings.reviews_dir,
+        "inbox": settings.shed,
+    }[section]
+
+    if section == "inbox":
+        if name != "inbox.md":
+            raise HTTPException(status_code=400, detail="Invalid inbox path")
+        return settings.inbox_path
+
+    resolved = (base / name).resolve()
+    if not str(resolved).startswith(str(base.resolve())):
+        raise HTTPException(status_code=403, detail="Path traversal not allowed")
+    if not resolved.suffix == ".md":
+        raise HTTPException(status_code=400, detail="Only .md files are supported")
+    return resolved
+
+
+@app.get("/api/files/{section}")
+async def api_list_files(section: str):
+    """List files available for editing in a backbone section."""
+    _validate_section(section)
+    settings = _settings()
+
+    if section == "daily":
+        files = sorted(settings.daily_dir.glob("*.md"), reverse=True)
+        return [
+            {"path": f.name, "label": f.stem, "group": None}
+            for f in files
+        ]
+
+    if section == "loops":
+        result = []
+        if settings.loops_open.exists():
+            result.append({"path": "open.md", "label": "Open Loops", "group": "Active"})
+        closed_dir = settings.loops_dir / "closed"
+        if closed_dir.exists():
+            for f in sorted(closed_dir.glob("*.md"), reverse=True):
+                result.append({
+                    "path": f"closed/{f.name}",
+                    "label": f.stem,
+                    "group": "Closed",
+                })
+        closed_flat = settings.loops_dir / "closed.md"
+        if closed_flat.exists():
+            result.append({"path": "closed.md", "label": "Closed (all)", "group": "Closed"})
+        return result
+
+    if section == "projects":
+        result = []
+        for state, label in [
+            (settings.active_dir, "Active"),
+            (settings.backlog_dir, "Backlog"),
+            (settings.archive_dir, "Archive"),
+        ]:
+            if not state.exists():
+                continue
+            for f in sorted(state.glob("*.md")):
+                rel = f.relative_to(settings.projects_dir)
+                result.append({
+                    "path": str(rel),
+                    "label": f.stem,
+                    "group": label,
+                })
+        return result
+
+    if section == "reviews":
+        files = sorted(settings.reviews_dir.glob("*.md"), reverse=True)
+        return [
+            {"path": f.name, "label": f.stem, "group": None}
+            for f in files
+        ]
+
+    if section == "inbox":
+        if settings.inbox_path.exists():
+            return [{"path": "inbox.md", "label": "Inbox", "group": None}]
+        return []
+
+    return []
+
+
+@app.get("/api/files/{section}/{name:path}")
+async def api_read_file(section: str, name: str):
+    """Read the content of a backbone file."""
+    _validate_section(section)
+    settings = _settings()
+    path = _resolve_file(section, name, settings)
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {name}")
+
+    content = path.read_text(encoding="utf-8")
+    return {"content": content, "path": name}
+
+
+@app.put("/api/files/{section}/{name:path}")
+async def api_write_file(section: str, name: str, request: Request):
+    """Save content to a backbone file."""
+    _validate_section(section)
+    settings = _settings()
+    path = _resolve_file(section, name, settings)
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {name}")
+
+    body = await request.json()
+    content = body.get("content")
+    if content is None:
+        raise HTTPException(status_code=400, detail="Missing 'content' field")
+
+    path.write_text(content, encoding="utf-8")
+    return {"status": "saved", "path": name}
+
+
+# -- File API: create -------------------------------------------------------
+
+
+@app.post("/api/files/daily/create-today")
+async def api_create_today():
+    """Create today's daily note (or return existing)."""
+    from adzekit.workspace import create_daily_note
+
+    settings = _settings()
+    settings.require_initialized()
+    path = create_daily_note(settings=settings)
+    return {"name": path.name, "status": "created"}
+
+
+@app.post("/api/files/reviews/create-this-week")
+async def api_create_this_week():
+    """Create this week's review (or return existing)."""
+    from adzekit.workspace import create_review
+
+    settings = _settings()
+    settings.require_initialized()
+    path = create_review(settings=settings)
+    return {"name": path.name, "status": "created"}
+
+
+@app.post("/api/files/projects/create")
+async def api_create_project(request: Request):
+    """Create a new project file."""
+    from adzekit.workspace import create_project
+
+    settings = _settings()
+    settings.require_initialized()
+
+    body = await request.json()
+    slug = body.get("slug", "").strip()
+    title = body.get("title", "").strip() or slug
+    state = body.get("state", "backlog")
+
+    if not slug:
+        raise HTTPException(status_code=400, detail="Slug is required")
+    if not re.match(r"^[a-z0-9][a-z0-9\-]*$", slug):
+        raise HTTPException(
+            status_code=400,
+            detail="Slug must be lowercase alphanumeric with hyphens (e.g. my-project)",
+        )
+    if state not in ("active", "backlog"):
+        raise HTTPException(status_code=400, detail="State must be 'active' or 'backlog'")
+
+    path = create_project(
+        slug=slug,
+        title=title,
+        backlog=(state == "backlog"),
+        settings=settings,
+    )
+    rel = path.relative_to(settings.projects_dir)
+    return {"name": str(rel), "status": "created"}
 
 
 def create_app() -> FastAPI:

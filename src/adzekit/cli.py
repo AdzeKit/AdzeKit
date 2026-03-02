@@ -335,7 +335,25 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
 
 def cmd_agent(args: argparse.Namespace) -> None:
-    """Run the agent with a one-shot message."""
+    """Run the agent with a one-shot message.
+
+    DEPRECATED: Use Claude Code with the AdzeKit MCP servers instead.
+    """
+    import warnings
+
+    warnings.warn(
+        "`adzekit agent` is deprecated and will be removed in a future release.\n"
+        "Use Claude Code with the AdzeKit MCP servers instead:\n"
+        "  adzekit-mcp-gmail      — Gmail tools\n"
+        "  adzekit-mcp-backbone   — Backbone/shed tools\n"
+        "See the /inbox-zero skill for the recommended email workflow.",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+    print(
+        "Deprecated: `adzekit agent` is superseded by Claude Code + AdzeKit MCP servers.\n"
+        "  Run adzekit-mcp-backbone and adzekit-mcp-gmail, then use the /inbox-zero skill.\n"
+    )
     # Import tools to register them
     import adzekit.agent.gmail_tools  # noqa: F401
     import adzekit.agent.shed_tools  # noqa: F401
@@ -350,6 +368,29 @@ def cmd_agent(args: argparse.Namespace) -> None:
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1)
+
+
+# -- set-shed --------------------------------------------------------------
+
+
+def cmd_set_shed(args: argparse.Namespace) -> None:
+    """Persist the shed path to ~/.config/adzekit/config for all future sessions."""
+    from adzekit.config import GLOBAL_CONFIG_PATH, set_global_shed
+
+    shed_path = Path(args.path).expanduser().resolve()
+
+    if not shed_path.exists():
+        print(f"Warning: {shed_path} does not exist yet. Creating config anyway.")
+    elif not (shed_path / ".adzekit").exists():
+        print(f"Warning: {shed_path} exists but has no .adzekit marker (not an initialized shed).")
+        print("  Run `adzekit init` inside that directory to initialize it.")
+
+    set_global_shed(shed_path)
+    print(f"Shed configured: {shed_path}")
+    print(f"Config saved:    {GLOBAL_CONFIG_PATH}")
+    print()
+    print("All AdzeKit tools and MCP servers will now use this shed automatically.")
+    print("No need to set ADZEKIT_SHED in your environment or MCP server config.")
 
 
 # -- sync ------------------------------------------------------------------
@@ -559,6 +600,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Host to bind to (default: 127.0.0.1).",
     )
     p_serve.set_defaults(func=cmd_serve)
+
+    # set-shed
+    p_set_shed = sub.add_parser(
+        "set-shed",
+        help="Set the global shed path (persists across sessions and terminal resets).",
+    )
+    p_set_shed.add_argument("path", help="Path to the AdzeKit shed (e.g. ~/Repos/adzekit-workspace).")
+    p_set_shed.set_defaults(func=cmd_set_shed)
 
     # agent
     p_agent = sub.add_parser("agent", help="Run the agent with a one-shot message.")

@@ -195,6 +195,11 @@
     <nav>
         <a href="/" class="logo">ADZEKIT <span>v0.1</span></a>
         <a href="/" {% if active_page == 'dashboard' %}class="active"{% endif %}>Dashboard</a>
+        <a href="/daily" {% if active_page == 'daily' %}class="active"{% endif %}>Daily</a>
+        <a href="/loops" {% if active_page == 'loops' %}class="active"{% endif %}>Loops</a>
+        <a href="/projects" {% if active_page == 'projects' %}class="active"{% endif %}>Projects</a>
+        <a href="/reviews" {% if active_page == 'reviews' %}class="active"{% endif %}>Reviews</a>
+        <a href="/inbox" {% if active_page == 'inbox' %}class="active"{% endif %}>Inbox</a>
         <a href="/agent" {% if active_page == 'agent' %}class="active"{% endif %}>Agent</a>
     </nav>
     <main>
