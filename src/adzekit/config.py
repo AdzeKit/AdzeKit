@@ -26,6 +26,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKBONE_VERSION = 1
 MARKER_FILE = ".adzekit"
 
+# Global config file — persists shed path across sessions and terminal resets.
+# Written by `adzekit set-shed <path>`. Checked before falling back to ~/adzekit default.
+GLOBAL_CONFIG_PATH = Path.home() / ".config" / "adzekit" / "config"
+
 # Defaults -- overridden per-shed via the .adzekit config file.
 DEFAULT_MAX_ACTIVE_PROJECTS = 3
 DEFAULT_MAX_DAILY_TASKS = 5
@@ -452,5 +456,30 @@ class Settings(BaseSettings):
         self.push_drafts()
 
 
+def set_global_shed(shed_path: Path) -> None:
+    """Write the shed path to the global config file (~/.config/adzekit/config).
+
+    Called by `adzekit set-shed`. Persists across sessions and terminal resets.
+    All AdzeKit tools and MCP servers pick this up via get_settings().
+    """
+    GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    data = _parse_kv_file(GLOBAL_CONFIG_PATH) if GLOBAL_CONFIG_PATH.exists() else {}
+    data["shed"] = str(shed_path)
+    lines = [f"{k} = {v}" for k, v in data.items()]
+    GLOBAL_CONFIG_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def get_settings() -> Settings:
+    """Return Settings, checking the global config for shed path if ADZEKIT_SHED is not set.
+
+    Resolution order:
+      1. ADZEKIT_SHED env var
+      2. ~/.config/adzekit/config  (written by `adzekit set-shed`)
+      3. Default ~/adzekit
+    """
+    if "ADZEKIT_SHED" not in os.environ:
+        if GLOBAL_CONFIG_PATH.exists():
+            data = _parse_kv_file(GLOBAL_CONFIG_PATH)
+            if "shed" in data:
+                return Settings(shed=Path(data["shed"]).expanduser())
     return Settings()

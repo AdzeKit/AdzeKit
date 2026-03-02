@@ -3,6 +3,14 @@
 Handles OAuth2 authentication and provides functions for reading, searching,
 labeling, archiving, and drafting replies to Gmail messages.
 
+Safety policy:
+    - AdzeKit can READ, SEARCH, LABEL, ARCHIVE, MARK-READ, and CREATE DRAFTS.
+    - AdzeKit CANNOT send emails, delete messages, or trash messages.
+    - These restrictions are enforced at the code level via explicit guards
+      on the GmailService class, since the gmail.modify OAuth scope (required
+      for archive/label operations) also grants send/trash at the API level.
+    - Drafts are saved for human review -- the human sends manually from Gmail.
+
 Setup:
     1. Create a Google Cloud project and enable the Gmail API.
     2. Create OAuth2 credentials (Desktop App type).
@@ -24,10 +32,11 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# gmail.modify is the minimum scope that covers read + label/archive/mark-read
+# + draft creation. It unfortunately also grants send/trash at the API level,
+# so those are blocked in code (see GmailService guards below).
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.labels",
 ]
 
 
@@ -83,11 +92,35 @@ class EmailMessage:
 
 
 class GmailService:
-    """Wrapper around the Gmail API with OAuth2 authentication."""
+    """Wrapper around the Gmail API with OAuth2 authentication.
+
+    Allowed operations: read, search, label, archive, mark-read, create drafts.
+    Blocked operations: send, delete, trash. These raise PermissionError.
+    """
 
     def __init__(self, settings: GmailSettings | None = None) -> None:
         self.settings = settings or GmailSettings()
         self._service = None
+
+    # -- Safety guards: these operations are permanently disabled -----------
+
+    def send(self, *args: Any, **kwargs: Any) -> None:
+        raise PermissionError(
+            "Sending is disabled by design. AdzeKit only creates drafts "
+            "for human review. Open Gmail to send manually."
+        )
+
+    def delete(self, *args: Any, **kwargs: Any) -> None:
+        raise PermissionError(
+            "Deleting is disabled by design. Messages cannot be permanently "
+            "removed via AdzeKit. Use archive instead."
+        )
+
+    def trash(self, *args: Any, **kwargs: Any) -> None:
+        raise PermissionError(
+            "Trashing is disabled by design. Messages cannot be moved to "
+            "trash via AdzeKit. Use archive instead."
+        )
 
     def _get_service(self):
         """Lazily build and cache the Gmail API service."""

@@ -1,0 +1,522 @@
+{% extends "base.html" %}
+{% block title_suffix %} - {{ section_title }}{% endblock %}
+
+{% block head %}
+<style>
+    main {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        height: calc(100vh - 49px);
+        display: flex;
+    }
+
+    .sidebar {
+        width: 260px;
+        min-width: 260px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .sidebar-header {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .sidebar-header h2 {
+        margin: 0;
+        font-size: 0.85rem;
+    }
+
+    .sidebar-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .sidebar-actions button {
+        flex: 1;
+        background: var(--accent-dim);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 0.6rem;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .sidebar-actions button:hover {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--bg);
+    }
+
+    .file-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem 0;
+    }
+
+    .file-group-label {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 0.75rem 1rem 0.25rem;
+    }
+
+    .file-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 0.4rem 1rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.1s;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .file-item:hover {
+        background: rgba(201, 162, 39, 0.08);
+        color: var(--text);
+    }
+
+    .file-item.active {
+        background: rgba(201, 162, 39, 0.15);
+        color: var(--accent);
+        border-left: 2px solid var(--accent);
+    }
+
+    .editor-pane {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .editor-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+        min-height: 44px;
+    }
+
+    .editor-filename {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    .editor-toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .save-status {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .save-status.visible { opacity: 1; }
+    .save-status.saved { color: var(--green); }
+    .save-status.error { color: var(--red); }
+    .save-status.dirty { color: var(--orange); }
+
+    .btn-save {
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 6px;
+        padding: 0.4rem 1rem;
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+
+    .btn-save:hover { opacity: 0.9; }
+    .btn-save:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .editor-textarea {
+        flex: 1;
+        width: 100%;
+        background: var(--bg);
+        color: var(--text);
+        border: none;
+        padding: 1rem 1.5rem;
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        resize: none;
+        tab-size: 4;
+    }
+
+    .editor-textarea:focus {
+        outline: none;
+    }
+
+    .editor-textarea:disabled {
+        opacity: 0.4;
+    }
+
+    .editor-empty {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-style: italic;
+    }
+
+    .create-form {
+        display: none;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(201, 162, 39, 0.05);
+    }
+
+    .create-form.visible { display: block; }
+
+    .create-form input, .create-form select {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.35rem 0.5rem;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .create-form input:focus, .create-form select:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+
+    .create-form label {
+        display: block;
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        margin-bottom: 0.2rem;
+        font-family: var(--mono);
+        text-transform: uppercase;
+    }
+
+    .create-form .form-row {
+        margin-bottom: 0.5rem;
+    }
+
+    .create-form .form-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .create-form .form-actions button {
+        flex: 1;
+        padding: 0.35rem;
+        border-radius: 4px;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        cursor: pointer;
+        border: 1px solid var(--border);
+    }
+
+    .create-form .btn-confirm {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: var(--accent);
+    }
+
+    .create-form .btn-cancel {
+        background: none;
+        color: var(--text-muted);
+    }
+
+    @media (max-width: 768px) {
+        main { flex-direction: column; }
+        .sidebar { width: 100%; min-width: unset; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h2>{{ section_title }}</h2>
+        <div class="sidebar-actions">
+            {% if section == 'daily' %}
+            <button onclick="createToday()">Today</button>
+            {% elif section == 'projects' %}
+            <button onclick="toggleCreateForm()">New Project</button>
+            {% elif section == 'reviews' %}
+            <button onclick="createThisWeek()">This Week</button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if section == 'projects' %}
+    <div class="create-form" id="create-form">
+        <div class="form-row">
+            <label>Slug</label>
+            <input type="text" id="create-slug" placeholder="my-project">
+        </div>
+        <div class="form-row">
+            <label>Title</label>
+            <input type="text" id="create-title" placeholder="My Project">
+        </div>
+        <div class="form-row">
+            <label>State</label>
+            <select id="create-state">
+                <option value="backlog">Backlog</option>
+                <option value="active">Active</option>
+            </select>
+        </div>
+        <div class="form-actions">
+            <button class="btn-confirm" onclick="createProject()">Create</button>
+            <button class="btn-cancel" onclick="toggleCreateForm()">Cancel</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="file-list" id="file-list">
+        <div class="file-item" style="cursor: default;">Loading...</div>
+    </div>
+</div>
+
+<div class="editor-pane">
+    <div class="editor-toolbar">
+        <span class="editor-filename" id="editor-filename">No file selected</span>
+        <div class="editor-toolbar-right">
+            <span class="save-status" id="save-status"></span>
+            <button class="btn-save" id="btn-save" disabled onclick="saveFile()">Save</button>
+        </div>
+    </div>
+    <textarea class="editor-textarea" id="editor" disabled placeholder="Select a file from the sidebar to begin editing."></textarea>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SECTION = '{{ section }}';
+const editorEl = document.getElementById('editor');
+const filenameEl = document.getElementById('editor-filename');
+const saveBtn = document.getElementById('btn-save');
+const statusEl = document.getElementById('save-status');
+
+let currentFile = null;
+let originalContent = '';
+
+editorEl.addEventListener('input', () => {
+    if (currentFile && editorEl.value !== originalContent) {
+        showStatus('Unsaved changes', 'dirty');
+        saveBtn.disabled = false;
+    } else {
+        hideStatus();
+    }
+});
+
+editorEl.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (currentFile) saveFile();
+    }
+    // Tab inserts a real tab instead of moving focus
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = editorEl.selectionStart;
+        const end = editorEl.selectionEnd;
+        editorEl.value = editorEl.value.substring(0, start) + '\t' + editorEl.value.substring(end);
+        editorEl.selectionStart = editorEl.selectionEnd = start + 1;
+        editorEl.dispatchEvent(new Event('input'));
+    }
+});
+
+async function loadFileList() {
+    try {
+        const res = await fetch(`/api/files/${SECTION}`);
+        const files = await res.json();
+        renderFileList(files);
+    } catch (err) {
+        console.error('Failed to load file list:', err);
+    }
+}
+
+function renderFileList(files) {
+    const listEl = document.getElementById('file-list');
+    if (!files.length) {
+        listEl.innerHTML = '<div class="file-item" style="cursor: default; font-style: italic;">No files yet.</div>';
+        return;
+    }
+
+    let html = '';
+    let lastGroup = null;
+
+    for (const f of files) {
+        if (f.group && f.group !== lastGroup) {
+            html += `<div class="file-group-label">${escapeHtml(f.group)}</div>`;
+            lastGroup = f.group;
+        }
+        const active = currentFile === f.path ? ' active' : '';
+        html += `<button class="file-item${active}" data-path="${escapeHtml(f.path)}" onclick="openFile('${escapeHtml(f.path)}')">${escapeHtml(f.label)}</button>`;
+    }
+
+    listEl.innerHTML = html;
+}
+
+async function openFile(path) {
+    if (currentFile && editorEl.value !== originalContent) {
+        if (!confirm('You have unsaved changes. Discard them?')) return;
+    }
+
+    try {
+        const res = await fetch(`/api/files/${SECTION}/${encodeURIComponent(path)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        currentFile = path;
+        originalContent = data.content;
+        editorEl.value = data.content;
+        editorEl.disabled = false;
+        saveBtn.disabled = true;
+        filenameEl.textContent = path;
+        hideStatus();
+
+        // Update active state in sidebar
+        document.querySelectorAll('.file-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.path === path);
+        });
+    } catch (err) {
+        showStatus(`Failed to load: ${err.message}`, 'error');
+    }
+}
+
+async function saveFile() {
+    if (!currentFile) return;
+
+    saveBtn.disabled = true;
+    showStatus('Saving...', 'dirty');
+
+    try {
+        const res = await fetch(`/api/files/${SECTION}/${encodeURIComponent(currentFile)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: editorEl.value }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        originalContent = editorEl.value;
+        showStatus('Saved', 'saved');
+        setTimeout(() => {
+            if (statusEl.textContent === 'Saved') hideStatus();
+        }, 2000);
+    } catch (err) {
+        showStatus(`Save failed: ${err.message}`, 'error');
+        saveBtn.disabled = false;
+    }
+}
+
+// Section-specific create actions
+
+async function createToday() {
+    try {
+        const res = await fetch(`/api/files/daily/create-today`, { method: 'POST' });
+        const data = await res.json();
+        await loadFileList();
+        openFile(data.name);
+    } catch (err) {
+        showStatus(`Failed: ${err.message}`, 'error');
+    }
+}
+
+async function createThisWeek() {
+    try {
+        const res = await fetch(`/api/files/reviews/create-this-week`, { method: 'POST' });
+        const data = await res.json();
+        await loadFileList();
+        openFile(data.name);
+    } catch (err) {
+        showStatus(`Failed: ${err.message}`, 'error');
+    }
+}
+
+function toggleCreateForm() {
+    document.getElementById('create-form').classList.toggle('visible');
+}
+
+async function createProject() {
+    const slug = document.getElementById('create-slug').value.trim();
+    const title = document.getElementById('create-title').value.trim();
+    const state = document.getElementById('create-state').value;
+
+    if (!slug) {
+        showStatus('Slug is required', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/files/projects/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, title: title || slug, state }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        toggleCreateForm();
+        document.getElementById('create-slug').value = '';
+        document.getElementById('create-title').value = '';
+        await loadFileList();
+        openFile(data.name);
+    } catch (err) {
+        showStatus(`Failed: ${err.message}`, 'error');
+    }
+}
+
+function showStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = `save-status visible ${cls}`;
+}
+
+function hideStatus() {
+    statusEl.className = 'save-status';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+loadFileList();
+</script>
+{% endblock %}
