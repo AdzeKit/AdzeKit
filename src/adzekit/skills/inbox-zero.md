@@ -63,21 +63,34 @@ For emails whose snippet suggests they are DIRECT or URGENT, fetch the full body
 
 ### Step 3 — Classify all emails
 
-For each email, assign exactly one category using the table below. Apply the context from Step 1:
-known junk/notification senders skip straight to their categories. Customer signals elevate an
-email to minimum DIRECT.
+For each email, assign exactly one category. Apply context from Step 1. Use the temporal check
+and grading rules below before assigning a final category.
+
+**Temporal check — apply first:**
+Before classifying, compare the email's Date header to today's date. If the email refers to a
+specific event, meeting, deadline, or time-sensitive ask:
+- If the referenced date/event is **in the past** → downgrade to **STALE** regardless of other signals
+- If no specific deadline is mentioned → classify normally, but do not use time-keyword signals
+  ("today", "deadline", etc.) to elevate to URGENT unless the email itself was sent today
+
+**STALE** is not a final category — it maps to a special archive action (see Step 4).
 
 | Category | When to use | Key signals |
 |----------|-------------|-------------|
-| **URGENT** | Customer escalation, time-critical, senior sender | External domain + customer project hint; words: "urgent", "ASAP", "blocked", "down", "today", "deadline"; sender is VP/Director/C-level (e.g. ali@databricks.com, CEO, exec); LLM judges high urgency |
-| **DIRECT** | Addressed specifically to user, response needed | User's name in To/CC, clear ask, meeting invite requiring RSVP, external domain with customer context |
-| **CHATTER** | Internal group discussion, no action required | Databricks mailing list, internal announcement, FYI thread, promotion request with no personal ask |
-| **NOTIFICATION** | Automated system email | GitHub, Jira, CI/CD alerts, calendar invites (auto-generated), Slack digests, product newsletters from known services |
-| **JUNK** | Marketing, newsletter, unsubscribe-eligible | Bulk mail headers, "unsubscribe" link prominent, no personal relevance |
+| **URGENT** | Active customer escalation or something genuinely blocked right now | Sender explicitly says something is broken/blocked/down today; C-level or exec sender with a direct ask; LLM is highly confident of immediate impact |
+| **DIRECT** | Clear personal ask requiring a reply or decision | User's name in To, explicit question or request, customer email with a genuine open ask |
+| **CHATTER** | Internal discussion or FYI with no personal action | Mailing list, announcement, internal thread where user is CC'd but not asked anything |
+| **NOTIFICATION** | Automated system email | GitHub, Jira, CI/CD, calendar auto-invites, Slack digests, newsletters from known services |
+| **JUNK** | Marketing or unsubscribe-eligible | Bulk mail headers, prominent unsubscribe link, no personal relevance |
 
-**Customer elevation rule:** If the LLM judges an email as customer-related (sender from external
-domain AND content relates to a project slug, customer name, or open loop) → minimum DIRECT,
-even if it looks like a notification.
+**Grading rules (prevent over-escalation):**
+- Keyword signals ("urgent", "ASAP", "deadline", "today") only count if the email was sent **today**
+  and the referenced deadline is **in the future**. Stale urgency keywords → ignore them.
+- Customer elevation (external domain + project hint) → minimum DIRECT, but NOT URGENT unless
+  there is also a clear active blocker or explicit escalation language.
+- Meeting invites for **past meetings** → STALE, not DIRECT. Calendar noise → NOTIFICATION.
+- If genuinely unsure between URGENT and DIRECT, prefer DIRECT.
+- If genuinely unsure between DIRECT and CHATTER, prefer DIRECT only if user is in To (not just CC).
 
 Process in batches of ~20 emails at a time for manageable context. Keep a running tally.
 
@@ -85,9 +98,13 @@ Process in batches of ~20 emails at a time for manageable context. Keep a runnin
 
 Apply actions in batches where possible.
 
-**JUNK and NOTIFICATION and CHATTER:**
-- MCP: `gmail_archive_batch([list of IDs])` then `gmail_mark_read` for each (or batch if available)
+**JUNK, NOTIFICATION, and CHATTER:**
+- MCP: `gmail_archive_batch([list of IDs])` then `gmail_mark_read` for each
 - API: `POST /messages/batchModify` with `removeLabelIds: ["INBOX", "UNREAD"]`
+
+**STALE** (past event/deadline, nothing actionable remaining):
+- MCP: `gmail_archive_batch([list of IDs])` — archive silently, no label, no draft
+- Note in the report under a "Stale / Past Events" section so the user can spot anything missed
 
 **DIRECT:**
 - MCP: `gmail_add_label(id, "AdzeKit/ActionRequired")` then `gmail_archive(id)`
@@ -111,13 +128,13 @@ Scott
 
 ### Step 5 — Write triage report
 
-Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM-DD.md`
-(use today's date).
+Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM-DD-HHMM.md`
+(use today's date and current time in 24h format, e.g. `inbox-zero-2026-03-02-0914.md`).
 
 **Report format:**
 
 ```markdown
-# Inbox Zero — YYYY-MM-DD
+# Inbox Zero — YYYY-MM-DD HH:MM
 
 ## Urgent (N)
 - **[CUSTOMER]** From: sender@domain.com | Subject line here
@@ -134,6 +151,11 @@ Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM
 - From: name@domain.com | Subject line here
   → Draft reply: draft ID ghi789
   → `- [ ] (M) [YYYY-MM-DD] <action> #tag`
+
+## Stale / Past Events (N)
+> Archived silently. Listed here so you can confirm nothing was missed.
+> - From: name@domain.com | Subject line | (past event: Mon Feb 24 meeting)
+> - From: name@domain.com | Subject line | (deadline passed: Feb 28)
 
 ## Notifications (N)
 > <1-3 sentence summary of what notifications arrived: which systems, what actions if any>
@@ -174,10 +196,10 @@ Print to terminal after completing:
 ```
 Inbox Zero complete — YYYY-MM-DD
   Processed: N emails
-  Archived:  N (junk: N, notification: N, chatter: N)
+  Archived:  N (junk: N, notification: N, chatter: N, stale: N)
   Labeled:   N urgent, N action-required
   Drafts:    N created
-  Report:    drafts/inbox-zero-YYYY-MM-DD.md
+  Report:    drafts/inbox-zero-YYYY-MM-DD-HHMM.md
 ```
 
 ---

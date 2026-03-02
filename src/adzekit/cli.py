@@ -23,17 +23,26 @@ from pathlib import Path
 def _resolve_settings(args: argparse.Namespace, *, require_init: bool = True):
     """Build a Settings instance from CLI args.
 
+    Resolution order:
+      1. --shed flag on the command line
+      2. ADZEKIT_SHED environment variable  (handled inside get_settings)
+      3. ~/.config/adzekit/config           (written by ``adzekit set-shed``)
+      4. Default ~/adzekit
+
     When require_init is True (the default), raises ShedNotInitializedError
     if the resolved shed directory does not contain a .adzekit marker file.
     Only ``init`` and ``adze`` should pass require_init=False.
     """
-    from adzekit.config import Settings
+    from adzekit.config import Settings, get_settings
 
-    kwargs: dict = {}
     shed = getattr(args, "shed", None)
     if shed:
-        kwargs["shed"] = Path(shed).expanduser().resolve()
-    settings = Settings(**kwargs)
+        # Explicit --shed flag overrides everything
+        settings = Settings(shed=Path(shed).expanduser().resolve())
+    else:
+        # Use get_settings() so ~/.config/adzekit/config is honoured
+        settings = get_settings()
+
     if require_init:
         settings.require_initialized()
     return settings

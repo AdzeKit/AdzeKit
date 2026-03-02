@@ -1,8 +1,64 @@
 {% extends "base.html" %}
 {% block title_suffix %} - Dashboard{% endblock %}
 
+{% block head %}
+<style>
+    .ai-status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.5rem;
+    }
+
+    .ai-status-item {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.45rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .ai-status-item:last-child { border-bottom: none; }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .status-dot.ok     { background: var(--green); }
+    .status-dot.warn   { background: var(--orange); }
+    .status-dot.error  { background: var(--red); }
+    .status-dot.loading { background: var(--border); animation: blink 1s ease-in-out infinite; }
+
+    @keyframes blink { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    .ai-status-name {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        flex: 1;
+    }
+
+    .ai-status-detail {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        font-family: var(--mono);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>// dashboard</h1>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+    <h3>// ai systems</h3>
+    <div class="ai-status-grid" id="ai-status-grid">
+        <div class="ai-status-item">
+            <div class="status-dot loading"></div>
+            <span class="ai-status-name">loading...</span>
+        </div>
+    </div>
+</div>
 
 <div class="grid" id="stats-grid">
     <div class="card">
@@ -58,6 +114,62 @@
 
 {% block scripts %}
 <script>
+async function loadAiStatus() {
+    try {
+        const res = await fetch('/api/mcp/status');
+        const data = await res.json();
+
+        const active = data.active_backend;
+        const items = [
+            {
+                name: `isaac${active === 'isaac' ? ' ◀' : ''}`,
+                ok: data.isaac?.available,
+                detail: data.isaac?.available ? 'available' : 'not found',
+            },
+            {
+                name: `claude code${active === 'claude' ? ' ◀' : ''}`,
+                ok: data.claude?.available,
+                detail: data.claude?.available ? 'available' : 'not found',
+            },
+            {
+                name: 'mcp: backbone',
+                ok: data.mcp_servers?.['adzekit-backbone']?.configured &&
+                    data.mcp_servers?.['adzekit-backbone']?.command_available,
+                detail: (() => {
+                    const s = data.mcp_servers?.['adzekit-backbone'];
+                    if (!s) return 'no response';
+                    if (s.error) return `error: ${s.error}`;
+                    if (!s.configured) return 'not in settings.json';
+                    return s.command_available ? 'ready' : `cmd missing: ${s.command}`;
+                })(),
+            },
+            {
+                name: 'mcp: gmail',
+                ok: data.mcp_servers?.['adzekit-gmail']?.configured &&
+                    data.mcp_servers?.['adzekit-gmail']?.command_available,
+                detail: (() => {
+                    const s = data.mcp_servers?.['adzekit-gmail'];
+                    if (!s) return 'no response';
+                    if (s.error) return `error: ${s.error}`;
+                    if (!s.configured) return 'not in settings.json';
+                    return s.command_available ? 'ready' : `cmd missing: ${s.command}`;
+                })(),
+            },
+        ];
+
+        document.getElementById('ai-status-grid').innerHTML = items.map(item => `
+            <div class="ai-status-item">
+                <div class="status-dot ${item.ok ? 'ok' : 'error'}"></div>
+                <span class="ai-status-name">${escapeHtml(item.name)}</span>
+                <span class="ai-status-detail">${escapeHtml(item.detail)}</span>
+            </div>
+        `).join('');
+    } catch (err) {
+        document.getElementById('ai-status-grid').innerHTML =
+            '<div class="ai-status-item"><div class="status-dot error"></div><span class="ai-status-name">failed to load status</span></div>';
+    }
+}
+
 async function loadDashboard() {
     try {
         const [statusRes, loopsRes, projectsRes] = await Promise.all([
@@ -135,6 +247,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+loadAiStatus();
 loadDashboard();
 </script>
 {% endblock %}

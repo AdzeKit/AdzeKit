@@ -168,12 +168,13 @@ def gmail_add_label(message_id: str, label_name: str) -> str:
 
 @mcp.tool
 def gmail_draft_reply(message_id: str, body: str) -> str:
-    """Create a draft reply to an email. The draft is saved in Gmail Drafts
-    for the user to review before sending -- never sends directly.
+    """Create a draft reply to an email, with the original thread quoted below.
+    The draft is saved in Gmail Drafts for the user to review before sending --
+    never sends directly.
 
     Args:
         message_id: The original message ID to reply to.
-        body: The reply body text.
+        body: The reply body text (stub only; original thread is appended automatically).
     """
     gmail = _get_gmail()
     original = gmail.get_message(message_id)
@@ -182,10 +183,16 @@ def gmail_draft_reply(message_id: str, body: str) -> str:
     if not subject.lower().startswith("re:"):
         subject = f"Re: {subject}"
 
+    # Append quoted original thread below the reply stub
+    quote_header = f"On {original.date}, {original.sender} wrote:"
+    quoted = "\n".join(f"> {line}" for line in original.body.splitlines())
+    full_body = f"{body}\n\n{quote_header}\n{quoted}" if original.body else body
+
     draft_id = gmail.create_draft(
         to=original.sender,
         subject=subject,
-        body=body,
+        body=full_body,
+        in_reply_to=original.message_id_header or None,
         thread_id=original.thread_id,
     )
     return json.dumps({
