@@ -84,6 +84,7 @@ class EmailMessage:
     body: str = ""
     labels: list[str] = field(default_factory=list)
     is_unread: bool = False
+    message_id_header: str = ""  # RFC 2822 Message-ID header for threading
 
     def summary(self) -> str:
         """One-line summary for LLM context."""
@@ -255,7 +256,7 @@ class GmailService:
         message["subject"] = subject
         if in_reply_to:
             message["In-Reply-To"] = in_reply_to
-            message["References"] = in_reply_to
+            message["References"] = in_reply_to  # full chain; Gmail appends thread history
 
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
         draft_body: dict[str, Any] = {"message": {"raw": raw}}
@@ -321,6 +322,7 @@ def _parse_message(msg: dict) -> EmailMessage:
         body=body,
         labels=labels,
         is_unread="UNREAD" in labels,
+        message_id_header=headers.get("message-id", ""),
     )
 
 

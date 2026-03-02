@@ -258,6 +258,37 @@
         main { flex-direction: column; }
         .sidebar { width: 100%; min-width: unset; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
     }
+
+    /* Tag autocomplete dropdown */
+    #tag-autocomplete {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        background: var(--surface);
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        min-width: 180px;
+        max-width: 280px;
+        max-height: 220px;
+        overflow-y: auto;
+        font-family: var(--mono);
+        font-size: 0.82rem;
+    }
+
+    .tag-item {
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tag-item:hover, .tag-item.selected {
+        background: rgba(201, 162, 39, 0.15);
+        color: var(--accent);
+    }
 </style>
 {% endblock %}
 
@@ -315,6 +346,7 @@
     </div>
     <textarea class="editor-textarea" id="editor" disabled placeholder="Select a file from the sidebar to begin editing."></textarea>
 </div>
+<div id="tag-autocomplete"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -516,6 +548,135 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ---- Tag autocomplete -------------------------------------------------------
+
+let _allTags = null;
+let _acHashPos = -1;
+let _acSelectedIndex = -1;
+let _acFiltered = [];
+const acEl = document.getElementById('tag-autocomplete');
+
+async function _fetchTags() {
+    if (_allTags !== null) return _allTags;
+    try {
+        const res = await fetch('/api/tags');
+        _allTags = await res.json();
+    } catch (_) {
+        _allTags = [];
+    }
+    return _allTags;
+}
+
+function _getTagQuery() {
+    const pos = editorEl.selectionStart;
+    const before = editorEl.value.substring(0, pos);
+    const m = before.match(/#([a-zA-Z0-9_-]*)$/);
+    return m ? { query: m[1], hashStart: pos - m[0].length } : null;
+}
+
+function _positionDropdown() {
+    // Estimate caret position by counting lines and chars before cursor.
+    const before = editorEl.value.substring(0, editorEl.selectionStart);
+    const lines = before.split('\n');
+    const lineIndex = lines.length - 1;
+
+    const style = window.getComputedStyle(editorEl);
+    const lineH = parseFloat(style.lineHeight) || 20;
+    const padTop = parseFloat(style.paddingTop) || 16;
+    const padLeft = parseFloat(style.paddingLeft) || 24;
+
+    const rect = editorEl.getBoundingClientRect();
+    const approxTop = rect.top + padTop + (lineIndex + 1) * lineH - editorEl.scrollTop;
+    const approxLeft = rect.left + padLeft;
+
+    // Flip above caret if too close to bottom
+    const dropH = Math.min(_acFiltered.length * 30, 220);
+    const top = (approxTop + dropH > window.innerHeight - 10)
+        ? approxTop - dropH - lineH
+        : approxTop;
+
+    acEl.style.top = `${Math.max(top, 4)}px`;
+    acEl.style.left = `${Math.min(approxLeft, window.innerWidth - 290)}px`;
+}
+
+function _renderDropdown() {
+    acEl.innerHTML = _acFiltered.map((t, i) =>
+        `<div class="tag-item${i === _acSelectedIndex ? ' selected' : ''}"
+              data-index="${i}">#${escapeHtml(t)}</div>`
+    ).join('');
+    acEl.style.display = 'block';
+    _positionDropdown();
+}
+
+function _hideDropdown() {
+    acEl.style.display = 'none';
+    _acHashPos = -1;
+    _acSelectedIndex = -1;
+    _acFiltered = [];
+}
+
+function _selectTag(index) {
+    if (index < 0 || index >= _acFiltered.length) return;
+    const tag = _acFiltered[index];
+    const curPos = editorEl.selectionStart;
+    const before = editorEl.value.substring(0, _acHashPos);
+    const after = editorEl.value.substring(curPos);
+    editorEl.value = before + '#' + tag + after;
+    const newPos = _acHashPos + tag.length + 1;
+    editorEl.selectionStart = editorEl.selectionEnd = newPos;
+    _hideDropdown();
+    editorEl.dispatchEvent(new Event('input'));
+}
+
+// Intercept keydown before the autocomplete acts on it
+editorEl.addEventListener('keydown', (e) => {
+    if (acEl.style.display === 'none') return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _acSelectedIndex = Math.min(_acSelectedIndex + 1, _acFiltered.length - 1);
+        _renderDropdown();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _acSelectedIndex = Math.max(_acSelectedIndex - 1, 0);
+        _renderDropdown();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (_acSelectedIndex >= 0) {
+            e.preventDefault();
+            _selectTag(_acSelectedIndex);
+        }
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        _hideDropdown();
+    }
+}, true); // capture phase so this runs before the save/tab handlers
+
+editorEl.addEventListener('input', async () => {
+    const q = _getTagQuery();
+    if (!q) { _hideDropdown(); return; }
+
+    _acHashPos = q.hashStart;
+    const tags = await _fetchTags();
+    const lower = q.query.toLowerCase();
+    _acFiltered = tags.filter(t => t.toLowerCase().startsWith(lower)).slice(0, 12);
+    if (_acFiltered.length === 0) { _hideDropdown(); return; }
+    _acSelectedIndex = 0;
+    _renderDropdown();
+});
+
+acEl.addEventListener('mousedown', (e) => {
+    const item = e.target.closest('.tag-item');
+    if (item) {
+        e.preventDefault();
+        _selectTag(parseInt(item.dataset.index, 10));
+    }
+});
+
+document.addEventListener('click', (e) => {
+    if (!acEl.contains(e.target) && e.target !== editorEl) _hideDropdown();
+});
+
+// ---- end autocomplete -------------------------------------------------------
 
 loadFileList();
 </script>

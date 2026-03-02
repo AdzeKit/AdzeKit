@@ -7,8 +7,10 @@ a file editor for direct manipulation of backbone markdown files.
 Run with: adzekit serve
 """
 
+import json
 import re
-from datetime import date
+import secrets
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -139,31 +141,186 @@ async def api_inbox():
     return {"content": content}
 
 
+@app.get("/api/mcp/status")
+async def api_mcp_status():
+    """Check availability of Claude Code / Isaac and configured MCP servers."""
+    from adzekit.agent.isaac_client import check_claude, check_isaac, check_mcp_servers
+
+    settings = _settings()
+    return {
+        "active_backend": settings.agent_backend,
+        "claude": check_claude(),
+        "isaac": check_isaac(),
+        "mcp_servers": check_mcp_servers(),
+    }
+
+
+def _sessions_dir() -> Path:
+    return _settings().drafts_dir / "sessions"
+
+
+def _load_session(session_id: str) -> dict:
+    path = _sessions_dir() / f"{session_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _save_session(data: dict) -> None:
+    d = _sessions_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{data['id']}.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+@app.get("/api/sessions")
+async def api_list_sessions():
+    """List all chat sessions, newest first."""
+    d = _sessions_dir()
+    if not d.exists():
+        return []
+    sessions = []
+    for f in sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            msgs = data.get("messages", [])
+            first_user = next((m["content"] for m in msgs if m["role"] == "user"), "")
+            sessions.append({
+                "id": data["id"],
+                "created": data.get("created", ""),
+                "updated": data.get("updated", ""),
+                "message_count": len(msgs),
+                "preview": first_user[:80],
+            })
+        except Exception:
+            continue
+    return sessions
+
+
+@app.post("/api/sessions")
+async def api_create_session():
+    """Create a new empty session."""
+    ts = datetime.now(timezone.utc)
+    session_id = ts.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(3)
+    data = {
+        "id": session_id,
+        "created": ts.isoformat(),
+        "updated": ts.isoformat(),
+        "messages": [],
+    }
+    _save_session(data)
+    return {"id": session_id}
+
+
+@app.get("/api/sessions/{session_id}")
+async def api_get_session(session_id: str):
+    """Get a session with all its messages."""
+    return _load_session(session_id)
+
+
+@app.put("/api/sessions/{session_id}")
+async def api_save_session(session_id: str, request: Request):
+    """Replace a session's message list."""
+    body = await request.json()
+    data = _load_session(session_id)
+    data["messages"] = body.get("messages", [])
+    data["updated"] = datetime.now(timezone.utc).isoformat()
+    _save_session(data)
+    return {"status": "saved"}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def api_delete_session(session_id: str):
+    path = _sessions_dir() / f"{session_id}.json"
+    if path.exists():
+        path.unlink()
+    return {"status": "deleted"}
+
+
+@app.get("/api/tags")
+async def api_tags():
+    """Return all unique #tags found across backbone markdown files."""
+    import re
+
+    settings = _settings()
+    tag_pattern = re.compile(r"#([a-zA-Z][a-zA-Z0-9_-]*)")
+    tags: set[str] = set()
+
+    dirs_to_scan = [
+        settings.daily_dir,
+        settings.loops_dir,
+        settings.projects_dir,
+        settings.reviews_dir,
+    ]
+    for d in dirs_to_scan:
+        if not d.exists():
+            continue
+        for f in d.rglob("*.md"):
+            try:
+                for match in tag_pattern.finditer(f.read_text(encoding="utf-8", errors="ignore")):
+                    tags.add(match.group(1))
+            except OSError:
+                continue
+
+    return sorted(tags)
+
+
 @app.post("/api/agent/chat")
 async def api_agent_chat(request: Request):
-    """Send a message to the agent and get a response."""
+    """Send a message to the agent and get a response.
+
+    Uses Claude Code (isaac) via --print for non-interactive execution.
+    The configured MCP servers (adzekit-backbone, adzekit-gmail) give the
+    agent full access to the backbone and Gmail tools.
+    Falls back to the local orchestrator if claude is not available.
+    """
     body = await request.json()
     user_message = body.get("message", "")
     if not user_message:
         return JSONResponse({"error": "No message provided"}, status_code=400)
+    history = body.get("history", [])  # [{role, content}, ...] last N turns
 
-    # Import agent tools to register them
+    settings = _settings()
+    backend = settings.agent_backend  # "isaac" | "claude" | "local"
+
+    if backend in ("isaac", "claude"):
+        from adzekit.agent.isaac_client import AgentNotAvailableError, run_agent as _run_agent
+
+        # Prefix prompt with recent conversation context so Isaac has memory
+        prompt = user_message
+        if history:
+            ctx_lines = ["[Previous conversation — continue naturally]\n"]
+            for m in history[-10:]:  # last 10 messages
+                role = "User" if m["role"] == "user" else "Assistant"
+                ctx_lines.append(f"{role}: {m['content']}")
+            ctx_lines.append(f"\n[New message]\nUser: {user_message}")
+            prompt = "\n".join(ctx_lines)
+
+        try:
+            response, used_backend = await _run_agent(
+                prompt, backend=backend, timeout=settings.agent_timeout
+            )
+            return {"response": response, "tool_calls_made": 0, "backend": used_backend}
+        except AgentNotAvailableError as exc:
+            return JSONResponse({"error": f"Backend unavailable: {exc}"}, status_code=503)
+        except Exception as exc:
+            return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+    # "local" — direct Anthropic API + local tool registry (no MCP)
     import adzekit.agent.gmail_tools  # noqa: F401
     import adzekit.agent.shed_tools  # noqa: F401
-    from adzekit.agent.orchestrator import run_agent
+    from adzekit.agent.orchestrator import run_agent as _run_local
 
     try:
-        result = run_agent(user_message)
+        result = _run_local(user_message)
         return {
             "response": result.response,
             "tool_calls_made": result.tool_calls_made,
-            "turns": len(result.turns),
+            "backend": "local",
         }
     except Exception as exc:
-        return JSONResponse(
-            {"error": f"{type(exc).__name__}: {exc}"},
-            status_code=500,
-        )
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
 # -- Backbone editor pages ---------------------------------------------------

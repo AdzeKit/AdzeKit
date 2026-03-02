@@ -100,6 +100,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    agent_backend: str = Field(
+        default="isaac",
+        description=(
+            "Agent backend for the web UI chat. "
+            "Options: 'isaac' (dbexec repo run isaac), 'claude' (claude CLI), "
+            "'local' (direct Anthropic API, no MCP). "
+            "Set via ADZEKIT_AGENT_BACKEND or agent_backend in .adzekit."
+        ),
+    )
+
+    agent_timeout: int = Field(
+        default=600,
+        description=(
+            "Seconds to wait for an agent response before timing out. "
+            "Isaac/Claude Code calls that use MCP tools can take several minutes. "
+            "Set via ADZEKIT_AGENT_TIMEOUT or agent_timeout in .adzekit."
+        ),
+    )
+
     @model_validator(mode="after")
     def _load_shed_config(self) -> "Settings":
         """Load connection settings from the shed's .adzekit config file.
@@ -118,13 +137,23 @@ class Settings(BaseSettings):
             "rclone_remote": "ADZEKIT_RCLONE_REMOTE",
             "git_repo": "ADZEKIT_GIT_REPO",
             "git_branch": "ADZEKIT_GIT_BRANCH",
+            "agent_backend": "ADZEKIT_AGENT_BACKEND",
+            "agent_timeout": "ADZEKIT_AGENT_TIMEOUT",
         }
         for field_name, env_key in field_map.items():
             if env_key in os.environ:
                 continue
             val = config.get(field_name)
-            if val and getattr(self, field_name) == type(self).model_fields[field_name].default:
-                object.__setattr__(self, field_name, val)
+            if not val:
+                continue
+            default = type(self).model_fields[field_name].default
+            if getattr(self, field_name) == default:
+                # Cast to the same type as the default to avoid str/int mismatches
+                try:
+                    typed_val = type(default)(val) if default is not None else val
+                except (ValueError, TypeError):
+                    typed_val = val
+                object.__setattr__(self, field_name, typed_val)
 
         return self
 
