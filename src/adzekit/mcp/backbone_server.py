@@ -149,8 +149,13 @@ def backbone_get_week_notes(iso_week: str | None = None) -> str:
     except ValueError:
         return json.dumps({"error": f"Invalid iso_week format: {iso_week!r}. Use 'YYYY-WNN'."})
 
-    # Compute Monday of the given ISO week
-    monday = date.fromisocalendar(year, week_num, 1)
+    # Compute Monday of the given ISO week.
+    # fromisocalendar() raises ValueError for out-of-range week numbers.
+    try:
+        monday = date.fromisocalendar(year, week_num, 1)
+    except ValueError:
+        return json.dumps({"error": f"Invalid ISO week value: {iso_week!r}. Use a valid calendar week."})
+
     week_dates = [monday + timedelta(days=i) for i in range(7)]
 
     settings = get_settings()
