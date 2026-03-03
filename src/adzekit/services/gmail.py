@@ -21,6 +21,7 @@ Setup:
 """
 
 import base64
+import binascii
 import json
 import os
 from dataclasses import dataclass, field
@@ -333,7 +334,9 @@ def _extract_body(payload: dict) -> str:
     if mime_type == "text/plain":
         data = payload.get("body", {}).get("data", "")
         if data:
-            return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+            decoded = _decode_body_data(data)
+            if decoded:
+                return decoded
 
     parts = payload.get("parts", [])
     for part in parts:
@@ -342,3 +345,14 @@ def _extract_body(payload: dict) -> str:
             return result
 
     return ""
+
+
+def _decode_body_data(data: str) -> str:
+    """Decode Gmail base64url body payloads with optional missing padding."""
+    # Gmail body payloads are base64url and may omit trailing "=" padding.
+    padded = data + "=" * (-len(data) % 4)
+    try:
+        decoded = base64.b64decode(padded, altchars=b"-_", validate=True)
+        return decoded.decode("utf-8", errors="replace")
+    except (ValueError, binascii.Error):
+        return ""
