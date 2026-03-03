@@ -3,8 +3,6 @@
 Uses the FastAPI test client with a real temp shed.
 """
 
-import os
-
 import pytest
 
 
@@ -71,3 +69,15 @@ def test_api_inbox(client):
 def test_api_agent_chat_no_message(client):
     response = client.post("/api/agent/chat", json={})
     assert response.status_code == 400
+
+
+def test_resolve_file_rejects_prefix_escape(workspace):
+    from fastapi import HTTPException
+
+    from adzekit.ui.app import _resolve_file
+
+    (workspace.shed / "projects-copy").mkdir(exist_ok=True)
+    with pytest.raises(HTTPException) as exc:
+        _resolve_file("projects", "../projects-copy/secret.md", workspace)
+
+    assert exc.value.status_code == 403
