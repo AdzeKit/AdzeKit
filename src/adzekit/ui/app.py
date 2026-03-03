@@ -403,8 +403,11 @@ def _resolve_file(section: str, name: str, settings: Settings) -> Path:
             raise HTTPException(status_code=400, detail="Invalid inbox path")
         return settings.inbox_path
 
+    base_resolved = base.resolve()
     resolved = (base / name).resolve()
-    if not str(resolved).startswith(str(base.resolve())):
+    try:
+        resolved.relative_to(base_resolved)
+    except ValueError:
         raise HTTPException(status_code=403, detail="Path traversal not allowed")
     if not resolved.suffix == ".md":
         raise HTTPException(status_code=400, detail="Only .md files are supported")
