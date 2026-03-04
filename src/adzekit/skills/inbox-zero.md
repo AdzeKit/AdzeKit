@@ -57,7 +57,7 @@ for ID in <ids>; do
 done
 ```
 
-For emails whose snippet suggests they are DIRECT or URGENT, fetch the full body:
+For emails whose snippet suggests they are DIRECT, URGENT, or REVIEW, fetch the full body:
 - MCP: `gmail_read_email(message_id)`
 - API: `?format=full` then decode `payload.body.data` from base64
 
@@ -79,8 +79,9 @@ specific event, meeting, deadline, or time-sensitive ask:
 |----------|-------------|-------------|
 | **URGENT** | Active customer escalation or something genuinely blocked right now | Sender explicitly says something is broken/blocked/down today; C-level or exec sender with a direct ask; LLM is highly confident of immediate impact |
 | **DIRECT** | Clear personal ask requiring a reply or decision | User's name in To, explicit question or request, customer email with a genuine open ask |
+| **REVIEW** | Pertinent information Scott should read but need not reply to | Industry news with real relevance to active projects; important internal announcements (product launches, org changes, exec updates); customer signals (renewal risk, expansion, project updates from customer domains); significant competitive or market intelligence |
 | **CHATTER** | Internal discussion or FYI with no personal action | Mailing list, announcement, internal thread where user is CC'd but not asked anything |
-| **NOTIFICATION** | Automated system email | GitHub, Jira, CI/CD, calendar auto-invites, Slack digests, newsletters from known services |
+| **NOTIFICATION** | Automated system email | GitHub, Jira, CI/CD, calendar invites (always — even from real people), Slack digests, newsletters from known services |
 | **JUNK** | Marketing or unsubscribe-eligible | Bulk mail headers, prominent unsubscribe link, no personal relevance |
 
 **Grading rules (prevent over-escalation):**
@@ -88,9 +89,11 @@ specific event, meeting, deadline, or time-sensitive ask:
   and the referenced deadline is **in the future**. Stale urgency keywords → ignore them.
 - Customer elevation (external domain + project hint) → minimum DIRECT, but NOT URGENT unless
   there is also a clear active blocker or explicit escalation language.
+- Calendar invites → always NOTIFICATION, regardless of sender. Never draft a reply to a calendar invite.
 - Meeting invites for **past meetings** → STALE, not DIRECT. Calendar noise → NOTIFICATION.
 - If genuinely unsure between URGENT and DIRECT, prefer DIRECT.
 - If genuinely unsure between DIRECT and CHATTER, prefer DIRECT only if user is in To (not just CC).
+- If genuinely unsure between REVIEW and CHATTER, prefer REVIEW only if the content is genuinely novel and relevant to active work — don't star noise.
 
 Process in batches of ~20 emails at a time for manageable context. Keep a running tally.
 
@@ -102,21 +105,27 @@ Apply actions in batches where possible.
 - MCP: `gmail_archive_batch([list of IDs])` then `gmail_mark_read` for each
 - API: `POST /messages/batchModify` with `removeLabelIds: ["INBOX", "UNREAD"]`
 
+**REVIEW:**
+- MCP: `gmail_star(id)` then `gmail_archive(id)`
+- API: `POST /messages/{id}/modify` with `addLabelIds: ["STARRED"]` and `removeLabelIds: ["INBOX"]`
+- No draft, no action label — star is the signal
+
 **STALE** (past event/deadline, nothing actionable remaining):
 - MCP: `gmail_archive_batch([list of IDs])` — archive silently, no label, no draft
 - Note in the report under a "Stale / Past Events" section so the user can spot anything missed
 
 **DIRECT:**
 - MCP: `gmail_add_label(id, "AdzeKit/ActionRequired")` then `gmail_archive(id)`
-- MCP: `gmail_draft_reply(id, <draft stub>)` — write a 2-3 sentence acknowledgement stub
+- Draft a reply **only if** the email contains a clear, specific question or explicit request that requires Scott's input. Skip the draft for: status updates framed as questions, informational emails with a courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
+- MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
 - API: POST `/messages/{id}/modify` to add label; POST `/messages/{id}` to archive
 
 **URGENT:**
 - MCP: `gmail_add_label(id, "AdzeKit/Urgent")` — stays in inbox, do NOT archive
-- MCP: `gmail_draft_reply(id, <draft stub>)` — write a responsive, appropriately urgent stub
+- MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
 - API: POST `/messages/{id}/modify` to add label only
 
-Draft reply stub format:
+Draft reply stub format (reply to sender only — never CC or include other thread recipients):
 ```
 Hi [Name],
 
@@ -136,6 +145,23 @@ Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM
 ```markdown
 # Inbox Zero — YYYY-MM-DD HH:MM
 
+## Summary
+
+| Category          | Count | Action            |
+|-------------------|-------|-------------------|
+| Urgent            |     N | labeled + draft   |
+| Direct            |     N | labeled (drafts: N, no-draft: N) |
+| Review            |     N | starred           |
+| Stale             |     N | archived silently |
+| Chatter           |     N | archived          |
+| Notifications     |     N | archived          |
+| Junk              |     N | archived          |
+| **Total**         | **N** |                   |
+
+Drafts created: N  ·  Emails starred: N  ·  Emails archived: N
+
+---
+
 ## Urgent (N)
 - **[CUSTOMER]** From: sender@domain.com | Subject line here
   Signals: customer escalation, time keyword "today"
@@ -151,6 +177,10 @@ Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM
 - From: name@domain.com | Subject line here
   → Draft reply: draft ID ghi789
   → `- [ ] (M) [YYYY-MM-DD] <action> #tag`
+
+## Review — Starred for Reading (N)
+- From: name@domain.com | Subject line here
+  Why: <1 sentence on why this is worth reading>
 
 ## Stale / Past Events (N)
 > Archived silently. Listed here so you can confirm nothing was missed.
@@ -172,7 +202,7 @@ Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM
 (archived silently)
 
 ---
-Actions: N processed · N archived · N labeled Urgent · N labeled ActionRequired · N drafts created
+Actions: N processed · N archived · N labeled Urgent · N labeled ActionRequired · N starred for review · N drafts created
 Run: YYYY-MM-DD HH:MM
 ```
 
@@ -194,13 +224,41 @@ Only add entries that aren't already in the memory file. Don't re-add known send
 
 Print to terminal after completing:
 ```
-Inbox Zero complete — YYYY-MM-DD
-  Processed: N emails
-  Archived:  N (junk: N, notification: N, chatter: N, stale: N)
-  Labeled:   N urgent, N action-required
-  Drafts:    N created
-  Report:    drafts/inbox-zero-YYYY-MM-DD-HHMM.md
+Inbox Zero complete — YYYY-MM-DD HH:MM
+
+  Urgent        N   (drafts: N)
+  Direct        N   (drafts: N, labeled only: N)
+  Review        N   (starred)
+  Stale         N   (archived silently)
+  Chatter       N   (archived)
+  Notifications N   (archived)
+  Junk          N   (archived)
+  ─────────────────────────────
+  Total         N
+
+  Archived:  N   Starred: N   Drafts: N
+
+Report: drafts/inbox-zero-YYYY-MM-DD-HHMM.md
 ```
+
+Then print the action queue as **loop-ready lines** that can be copied directly into `loops/open.md`.
+Use the backbone loop format with the date the email was processed (today), not the email's send date:
+
+```
+Your action queue (copy to loops/open.md):
+
+- [ ] (XS) [YYYY-MM-DD] Action item description #customer-tag
+- [ ] (S) [YYYY-MM-DD] Action item description — draft reply queued #tag
+- [ ] (M) [YYYY-MM-DD] Action item description #tag
+```
+
+Sizing guide for action queue items:
+- `(XS)` — single reply or quick decision, < 5 min
+- `(S)` — short task, one interaction, < 30 min
+- `(M)` — requires preparation or multiple steps, < 2 hours
+- `(L)` — significant effort, review, or multi-day work
+
+End with any notable items from notifications that may need future attention, as a plain text line.
 
 ---
 
@@ -209,6 +267,9 @@ Inbox Zero complete — YYYY-MM-DD
 - NEVER send emails — draft only
 - NEVER delete or trash emails — archive only
 - NEVER write to backbone directories: loops/, projects/, daily/, knowledge/, reviews/
+- NEVER reply-all — drafts go to the original sender only, no CC recipients
+- NEVER draft a reply to a calendar invite — classify as NOTIFICATION and archive
+- NEVER draft a reply unless there is a clear, specific ask that requires Scott's personal response
 - Proposed loops go in the triage report only — human copies them to loops/open.md
 - If unsure about a classification, prefer DIRECT over CHATTER (false positive is safer)
 - If unsure about urgency, prefer URGENT over DIRECT for external/customer emails
