@@ -1,8 +1,8 @@
 # Inbox Zero Skill
 
-Reach inbox zero by classifying, acting on, and summarizing up to 100 inbox emails. Writes a
-structured triage report to `drafts/` and updates the email patterns memory file. Never writes to
-backbone directories (loops/, projects/, daily/).
+Reach inbox zero by classifying, acting on, and summarizing up to 100 inbox emails. Stars and
+labels REVIEW emails, outputs copy-paste-ready loops for ACTION emails, writes a triage report
+to `drafts/`, and updates the email patterns memory file.
 
 ## Prerequisites
 
@@ -105,10 +105,14 @@ Apply actions in batches where possible.
 - MCP: `gmail_archive_batch([list of IDs])` then `gmail_mark_read` for each
 - API: `POST /messages/batchModify` with `removeLabelIds: ["INBOX", "UNREAD"]`
 
-**REVIEW:**
-- MCP: `gmail_star(id)` then `gmail_archive(id)`
-- API: `POST /messages/{id}/modify` with `addLabelIds: ["STARRED"]` and `removeLabelIds: ["INBOX"]`
-- No draft, no action label — star is the signal
+**REVIEW — MANDATORY: star + label every REVIEW email, no exceptions:**
+1. `gmail_add_label(id, "AdzeKit/Review")` — tag it
+2. `gmail_star(id)` — star it for visibility
+3. `gmail_archive(id)` — remove from inbox
+
+All three calls are REQUIRED for every REVIEW email. Do NOT skip starring or labeling.
+API fallback: `POST /messages/{id}/modify` with `addLabelIds: ["STARRED", "<AdzeKit/Review label ID>"]` and `removeLabelIds: ["INBOX"]`
+No draft — label + star are the signals.
 
 **STALE** (past event/deadline, nothing actionable remaining):
 - MCP: `gmail_archive_batch([list of IDs])` — archive silently, no label, no draft
@@ -119,7 +123,6 @@ Apply actions in batches where possible.
 - Draft a reply **only if** the email contains a clear, specific question or explicit request that requires Scott's input. Skip the draft for: status updates framed as questions, informational emails with a courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
 - MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
 - API: POST `/messages/{id}/modify` to add label; POST `/messages/{id}` to archive
-
 **URGENT:**
 - MCP: `gmail_add_label(id, "AdzeKit/Urgent")` — stays in inbox, do NOT archive
 - MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
@@ -166,7 +169,7 @@ Drafts created: N  ·  Emails starred: N  ·  Emails archived: N
 - **[CUSTOMER]** From: sender@domain.com | Subject line here
   Signals: customer escalation, time keyword "today"
   → Draft reply: draft ID abc123
-  → `- [ ] (S) [YYYY-MM-DD] Respond to <topic> #tag1 #tag2`
+  → `- [ ] (S) [YYYY-MM-DD] Respond to #Customer re: <topic>`
 
 - From: ali@databricks.com | Subject line here
   Signals: senior sender (CEO)
@@ -176,7 +179,7 @@ Drafts created: N  ·  Emails starred: N  ·  Emails archived: N
 ## Direct — Action Required (N)
 - From: name@domain.com | Subject line here
   → Draft reply: draft ID ghi789
-  → `- [ ] (M) [YYYY-MM-DD] <action> #tag`
+  → `- [ ] (M) [YYYY-MM-DD] Follow up with #Customer re: <topic>`
 
 ## Review — Starred for Reading (N)
 - From: name@domain.com | Subject line here
@@ -206,7 +209,7 @@ Actions: N processed · N archived · N labeled Urgent · N labeled ActionRequir
 Run: YYYY-MM-DD HH:MM
 ```
 
-Proposed loop lines (in Urgent and Direct sections) are copy-paste ready for `loops/open.md`.
+Loop lines in Urgent and Direct sections are copy-paste ready for `loops/open.md`.
 
 ### Step 6 — Update email patterns memory
 
@@ -242,17 +245,29 @@ Report: drafts/inbox-zero-YYYY-MM-DD-HHMM.md
 ```
 
 Then print the action queue as **loop-ready lines** that can be copied directly into `loops/open.md`.
-Use the backbone loop format with the date the email was processed (today), not the email's send date:
 
+**Generate one loop line for EVERY URGENT and DIRECT email** — no exceptions. Do not skip, summarize, or group. Each email that stays labeled (Urgent or ActionRequired) gets exactly one line.
+
+Use the AdzeKit backbone loop format:
+```
+- [ ] (SIZE) [YYYY-MM-DD] Verb + description, embed #customer-slug in text
+```
+
+Rules:
+- Date = today (the date the triage ran), NOT the email's send date
+- Customer/project slug is embedded as a `#hashtag` in the description text (not appended at the end)
+- No trailing punctuation, no extra metadata
+
+Concrete examples matching the backbone format:
 ```
 Your action queue (copy to loops/open.md):
 
-- [ ] (XS) [YYYY-MM-DD] Action item description #customer-tag
-- [ ] (S) [YYYY-MM-DD] Action item description — draft reply queued #tag
-- [ ] (M) [YYYY-MM-DD] Action item description #tag
+- [ ] (XS) [2026-03-04] Reply to #Ovintiv re: Serverless Ray + Prompt Caching question
+- [ ] (S) [2026-03-04] Follow up on #OTPP AI Gateway/Gemini issue — draft reply queued
+- [ ] (M) [2026-03-04] Review #AER CMP POC Phase 0 proposal and respond
 ```
 
-Sizing guide for action queue items:
+Sizing guide:
 - `(XS)` — single reply or quick decision, < 5 min
 - `(S)` — short task, one interaction, < 30 min
 - `(M)` — requires preparation or multiple steps, < 2 hours
@@ -270,7 +285,7 @@ End with any notable items from notifications that may need future attention, as
 - NEVER reply-all — drafts go to the original sender only, no CC recipients
 - NEVER draft a reply to a calendar invite — classify as NOTIFICATION and archive
 - NEVER draft a reply unless there is a clear, specific ask that requires Scott's personal response
-- Proposed loops go in the triage report only — human copies them to loops/open.md
+- Proposed loops go in the triage report and terminal output only — human copies them to loops/open.md
 - If unsure about a classification, prefer DIRECT over CHATTER (false positive is safer)
 - If unsure about urgency, prefer URGENT over DIRECT for external/customer emails
 

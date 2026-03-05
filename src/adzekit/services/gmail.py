@@ -232,6 +232,15 @@ class GmailService:
             body={"removeLabelIds": ["UNREAD"]},
         ).execute()
 
+    def star(self, msg_id: str) -> None:
+        """Star a message (add the Gmail STARRED system label)."""
+        service = self._get_service()
+        service.users().messages().modify(
+            userId="me",
+            id=msg_id,
+            body={"addLabelIds": ["STARRED"]},
+        ).execute()
+
     def add_label(self, msg_id: str, label_name: str) -> None:
         """Add a label to a message. Creates the label if it doesn't exist."""
         service = self._get_service()

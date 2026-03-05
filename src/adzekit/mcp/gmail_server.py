@@ -154,6 +154,18 @@ def gmail_mark_read(message_id: str) -> str:
 
 
 @mcp.tool
+def gmail_star(message_id: str) -> str:
+    """Star an email (add the Gmail STARRED system label).
+
+    Args:
+        message_id: The Gmail message ID to star.
+    """
+    gmail = _get_gmail()
+    gmail.star(message_id)
+    return json.dumps({"status": "starred", "message_id": message_id})
+
+
+@mcp.tool
 def gmail_add_label(message_id: str, label_name: str) -> str:
     """Add a label to an email. Creates the label if it does not exist.
 
