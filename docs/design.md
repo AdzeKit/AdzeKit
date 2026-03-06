@@ -81,7 +81,7 @@ Loops have no stable identifier -- no UUID, no auto-incrementing number. Identit
 
 ### Tags at scale
 
-Tags are a flat, case-insensitive, unregistered namespace. All tags are lowercased at extraction (`extract_tags` calls `.lower()`), so `#Citco` and `#citco` always match. There is no `tags.json` or `tags.md` to maintain -- a maintained index drifts the moment someone writes a new tag and forgets to update the list. Instead, the tag index is always computed from the filesystem: scan every `.md` file for `#word` tokens and build `dict[str, list[Path]]` in memory. This stays fast even at thousands of files because it's a single-pass regex over small text files.
+Tags are a flat, case-insensitive, unregistered namespace. All tags are lowercased at extraction (`extract_tags` calls `.lower()`), so `#Acme` and `#acme` always match. There is no `tags.json` or `tags.md` to maintain -- a maintained index drifts the moment someone writes a new tag and forgets to update the list. Instead, the tag index is always computed from the filesystem: scan every `.md` file for `#word` tokens and build `dict[str, list[Path]]` in memory. This stays fast even at thousands of files because it's a single-pass regex over small text files.
 
 Contacts, topics, clients, and reference IDs all use the same `#kebab-case` tag syntax. No namespace prefixes -- types are self-evident from context (names vs concepts vs alphanumeric IDs). If tooling ever needs to classify tags programmatically, it can infer type from pattern without adding structure to the writing surface.
 
@@ -103,7 +103,7 @@ The `stock/` directory holds raw artifacts -- transcripts, PDFs, spreadsheets, r
 
 Stock is git-ignored because these files are typically large, binary, or in proprietary formats that git handles poorly. Instead, `stock/` syncs to a cloud remote via rclone. The `ADZEKIT_RCLONE_REMOTE` setting points to the remote (Google Drive, SharePoint, S3, etc.). `sync_stock()` pulls from the remote, `push_stock()` pushes local changes up.
 
-Subdirectories inside `stock/` match project slugs (`stock/otpp-vectorsearch/`). This gives LLM adapters a clear input path: read from `stock/<slug>/`, summarize into the project's `## Log`.
+Subdirectories inside `stock/` match project slugs (`stock/acme-vectorsearch/`). This gives LLM adapters a clear input path: read from `stock/<slug>/`, summarize into the project's `## Log`.
 
 ## Drafts
 

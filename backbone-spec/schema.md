@@ -115,7 +115,7 @@ Files carry no YAML frontmatter. All metadata is derived from the filesystem, gi
   - When `adzekit sweep` moves a closed loop to `closed.md`, the date is **overwritten with the closure date** (today).
   - Git history records both transitions: `git log -p -- loops/open.md` shows when the line appeared (creation) and disappeared (sweep); `git log -p -- loops/closed.md` shows when it arrived (closure). The inline date in each file gives the same information without requiring git archaeology.
   - This dual-use works because a loop only ever lives in one file at a time, and the relevant question differs by context: "how old is this open commitment?" vs "when did I close this?"
-- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). Tags are **case-insensitive** -- `#Citco`, `#citco`, and `#CITCO` all resolve to the same tag (`citco`). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
+- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). Tags are **case-insensitive** -- `#Acme`, `#acme`, and `#ACME` all resolve to the same tag (`acme`). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
 
 ### Tag conventions
 
@@ -127,7 +127,7 @@ Tags are a flat, case-insensitive namespace. There is no tag registry, no contro
 
 - **People:** `#alice-chen`, `#ryan-bondaria`
 - **Topics:** `#vector-search`, `#machine-learning`
-- **Clients/orgs:** `#citco`, `#nova`, `#otpp`
+- **Clients/orgs:** `#acme`, `#nova`, `#globex`
 - **Reference IDs:** `#AR-000109761`
 
 If programmatic classification is ever needed, the tooling layer can infer type from pattern (names vs concepts vs IDs) without burdening the writer.
@@ -178,7 +178,7 @@ Example:
 
 - [ ] (XS) [2026-02-17] Follow up with Alice on API estimate
 - [ ] (M) [2026-02-18] Start column mapping work with Jas (2026-03-01)
-- [ ] (S) [2026-02-19] Get Ovintiv docs for gateway diagnosis
+- [ ] (S) [2026-02-19] Get Acme docs for gateway diagnosis
 ```
 
 ### Closing loops

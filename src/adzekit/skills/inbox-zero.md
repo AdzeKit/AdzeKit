@@ -26,7 +26,7 @@ Call all three in parallel:
 
 Build a working context block:
 ```
-CUSTOMER HINTS: birchcliff, citco, ovintiv, exo, brucePower, aer, <project slugs>
+CUSTOMER HINTS: <project slugs from backbone_get_projects()>
 OPEN LOOPS WITH: <who values from open loops>
 KNOWN JUNK: <senders from email-patterns.md>
 KNOWN NOTIFICATIONS: <senders from email-patterns.md>
@@ -46,14 +46,12 @@ gmail_get_inbox(max_results=100)
 TOKEN=$(gcloud auth application-default print-access-token)
 # Fetch 100 message IDs
 curl -s "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=100" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-goog-user-project: gcp-sandbox-field-eng"
+  -H "Authorization: Bearer $TOKEN"
 
 # Fetch metadata for all IDs
 for ID in <ids>; do
   curl -s "https://gmail.googleapis.com/gmail/v1/users/me/messages/${ID}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "x-goog-user-project: gcp-sandbox-field-eng"
+    -H "Authorization: Bearer $TOKEN"
 done
 ```
 
@@ -77,10 +75,10 @@ specific event, meeting, deadline, or time-sensitive ask:
 
 | Category | When to use | Key signals |
 |----------|-------------|-------------|
-| **URGENT** | Active customer escalation or something genuinely blocked right now | Sender explicitly says something is broken/blocked/down today; C-level or exec sender with a direct ask; LLM is highly confident of immediate impact |
-| **DIRECT** | Clear personal ask requiring a reply or decision | User's name in To, explicit question or request, customer email with a genuine open ask |
-| **REVIEW** | Pertinent information Scott should read but need not reply to | Industry news with real relevance to active projects; important internal announcements (product launches, org changes, exec updates); customer signals (renewal risk, expansion, project updates from customer domains); significant competitive or market intelligence |
-| **CHATTER** | Internal discussion or FYI with no personal action | Mailing list, announcement, internal thread where user is CC'd but not asked anything |
+| **URGENT** | Active escalation or something genuinely blocked right now | Sender explicitly says something is broken/blocked/down today; executive sender with a direct ask; high confidence of immediate impact |
+| **DIRECT** | Clear personal ask requiring a reply or decision | Your name in To, explicit question or request, external email with a genuine open ask |
+| **REVIEW** | Pertinent information you should read but need not reply to | Industry news relevant to active projects; important internal announcements; customer signals; significant competitive or market intelligence |
+| **CHATTER** | Internal discussion or FYI with no personal action | Mailing list, announcement, internal thread where you are CC'd but not asked anything |
 | **NOTIFICATION** | Automated system email | GitHub, Jira, CI/CD, calendar invites (always — even from real people), Slack digests, newsletters from known services |
 | **JUNK** | Marketing or unsubscribe-eligible | Bulk mail headers, prominent unsubscribe link, no personal relevance |
 
@@ -120,7 +118,7 @@ No draft — label + star are the signals.
 
 **DIRECT:**
 - MCP: `gmail_add_label(id, "AdzeKit/ActionRequired")` then `gmail_archive(id)`
-- Draft a reply **only if** the email contains a clear, specific question or explicit request that requires Scott's input. Skip the draft for: status updates framed as questions, informational emails with a courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
+- Draft a reply **only if** the email contains a clear, specific question or explicit request. Skip the draft for: status updates framed as questions, informational emails with a courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
 - MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
 - API: POST `/messages/{id}/modify` to add label; POST `/messages/{id}` to archive
 **URGENT:**
@@ -135,7 +133,7 @@ Hi [Name],
 [1-2 sentences acknowledging the email and indicating next step or timeline.]
 
 Thanks,
-Scott
+[Your name]
 ```
 
 ### Step 5 — Write triage report
@@ -169,17 +167,12 @@ Drafts created: N  ·  Emails starred: N  ·  Emails archived: N
 - **[CUSTOMER]** From: sender@domain.com | Subject line here
   Signals: customer escalation, time keyword "today"
   → Draft reply: draft ID abc123
-  → `- [ ] (S) [YYYY-MM-DD] Respond to #Customer re: <topic>`
-
-- From: ali@databricks.com | Subject line here
-  Signals: senior sender (CEO)
-  → Draft reply: draft ID def456
-  → `- [ ] (S) [YYYY-MM-DD] Action re: <topic>`
+  → `- [ ] (S) [YYYY-MM-DD] Respond to #customer re: <topic>`
 
 ## Direct — Action Required (N)
 - From: name@domain.com | Subject line here
   → Draft reply: draft ID ghi789
-  → `- [ ] (M) [YYYY-MM-DD] Follow up with #Customer re: <topic>`
+  → `- [ ] (M) [YYYY-MM-DD] Follow up with #customer re: <topic>`
 
 ## Review — Starred for Reading (N)
 - From: name@domain.com | Subject line here
@@ -187,19 +180,12 @@ Drafts created: N  ·  Emails starred: N  ·  Emails archived: N
 
 ## Stale / Past Events (N)
 > Archived silently. Listed here so you can confirm nothing was missed.
-> - From: name@domain.com | Subject line | (past event: Mon Feb 24 meeting)
-> - From: name@domain.com | Subject line | (deadline passed: Feb 28)
 
 ## Notifications (N)
-> <1-3 sentence summary of what notifications arrived: which systems, what actions if any>
-> Example: GitHub sent 2 PR review requests and 1 CI failure on adzekit. Jira updated 3 tickets.
-> Calendar: 1 new invite (BrucePower Document Parsing, Mon Mar 2, 10:30am EST).
+> <1-3 sentence summary of what notifications arrived>
 
 ## Chatter (N)
-> <1-2 sentence summary of what internal colleagues are discussing>
-> Example: Colleagues are discussing the FGAC external engines private preview launch,
-> promoting the Lakebase Autoscaling Deep Dive community event, and an ongoing
-> "Selling Genie" strategy thread led by Alistair and Garrett.
+> <1-2 sentence summary of internal discussions>
 
 ## Junk Archived (N)
 (archived silently)
@@ -246,7 +232,8 @@ Report: drafts/inbox-zero-YYYY-MM-DD-HHMM.md
 
 Then print the action queue as **loop-ready lines** that can be copied directly into `loops/open.md`.
 
-**Generate one loop line for EVERY URGENT and DIRECT email** — no exceptions. Do not skip, summarize, or group. Each email that stays labeled (Urgent or ActionRequired) gets exactly one line.
+**Generate one loop line for EVERY URGENT and DIRECT email** — no exceptions. Each email that
+stays labeled (Urgent or ActionRequired) gets exactly one line.
 
 Use the AdzeKit backbone loop format:
 ```
@@ -255,25 +242,14 @@ Use the AdzeKit backbone loop format:
 
 Rules:
 - Date = today (the date the triage ran), NOT the email's send date
-- Customer/project slug is embedded as a `#hashtag` in the description text (not appended at the end)
+- Customer/project slug is embedded as a `#hashtag` in the description text
 - No trailing punctuation, no extra metadata
-
-Concrete examples matching the backbone format:
-```
-Your action queue (copy to loops/open.md):
-
-- [ ] (XS) [2026-03-04] Reply to #Ovintiv re: Serverless Ray + Prompt Caching question
-- [ ] (S) [2026-03-04] Follow up on #OTPP AI Gateway/Gemini issue — draft reply queued
-- [ ] (M) [2026-03-04] Review #AER CMP POC Phase 0 proposal and respond
-```
 
 Sizing guide:
 - `(XS)` — single reply or quick decision, < 5 min
 - `(S)` — short task, one interaction, < 30 min
 - `(M)` — requires preparation or multiple steps, < 2 hours
 - `(L)` — significant effort, review, or multi-day work
-
-End with any notable items from notifications that may need future attention, as a plain text line.
 
 ---
 
@@ -284,33 +260,16 @@ End with any notable items from notifications that may need future attention, as
 - NEVER write to backbone directories: loops/, projects/, daily/, knowledge/, reviews/
 - NEVER reply-all — drafts go to the original sender only, no CC recipients
 - NEVER draft a reply to a calendar invite — classify as NOTIFICATION and archive
-- NEVER draft a reply unless there is a clear, specific ask that requires Scott's personal response
+- NEVER draft a reply unless there is a clear, specific ask requiring a personal response
 - Proposed loops go in the triage report and terminal output only — human copies them to loops/open.md
 - If unsure about a classification, prefer DIRECT over CHATTER (false positive is safer)
-- If unsure about urgency, prefer URGENT over DIRECT for external/customer emails
+- If unsure about urgency, prefer URGENT over DIRECT for external emails
 
 ---
 
 ## MCP Configuration
 
-Add to `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "adzekit-backbone": {
-      "command": "adzekit-mcp-backbone",
-      "env": {
-        "ADZEKIT_SHED": "/Users/<you>/Repos/adzekit-workspace"
-      }
-    },
-    "adzekit-gmail": {
-      "command": "adzekit-mcp-gmail"
-    }
-  }
-}
-```
-
-Restart Claude Code after adding MCP servers to pick up the new tools.
+Both `adzekit-mcp-backbone` and `adzekit-mcp-gmail` MCP servers must be running and configured
+in `.claude/settings.json` with `ADZEKIT_SHED` pointing to your workspace directory.
 
 ARGUMENTS: $ARGUMENTS
