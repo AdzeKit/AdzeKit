@@ -539,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # project
     p_project = sub.add_parser("project", help="Create a new project file.")
-    p_project.add_argument("slug", help="Project slug (e.g. strathcona-reservoir).")
+    p_project.add_argument("slug", help="Project slug (e.g. acme-migration).")
     p_project.add_argument(
         "--title", default=None, help="Project title (default: slug).",
     )
@@ -555,7 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # poc-init
     p_poc = sub.add_parser("poc-init", help="Generate a POC design document in stock/.")
-    p_poc.add_argument("slug", help="Project slug (e.g. citco-columnmapping).")
+    p_poc.add_argument("slug", help="Project slug (e.g. acme-datamigration).")
     p_poc.add_argument(
         "--docx",
         action="store_true",

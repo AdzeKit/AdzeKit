@@ -1,7 +1,7 @@
 # Daily Start Skill
 
 Generate today's daily note pre-populated with real context: yesterday's carried intentions,
-loops due today or overdue, and a proposed set of 3–5 focus tasks for the day. Removes the
+loops due today or overdue, and a proposed set of 3-5 focus tasks for the day. Removes the
 blank-page problem at the start of each morning.
 
 Output goes to `drafts/daily-YYYY-MM-DD.md` for human review. The human then moves it into
@@ -15,18 +15,7 @@ Never writes directly to `daily/`. Human always decides.
 ## Prerequisites
 
 The `adzekit-backbone` MCP server should be running. If not, fall back to direct file reads
-from the shed (default `~/Repos/adzekit-workspace/`).
-
-```json
-{
-  "mcpServers": {
-    "adzekit-backbone": {
-      "command": "adzekit-mcp-backbone",
-      "env": { "ADZEKIT_SHED": "/Users/scott.mckean/Repos/adzekit-workspace" }
-    }
-  }
-}
-```
+from the shed (default `~/adzekit`).
 
 ---
 
@@ -73,9 +62,9 @@ Build a ranked, de-duplicated list of proposed focus tasks from:
 
 **Source 1 — Loops due today or overdue** (highest priority):
 - Include all `loops.due_today` entries, formatted as:
-  `- [ ] ({size}) [{due_date}] {loop title}  ← due today`
+  `- [ ] ({size}) [{due_date}] {loop title}  <- due today`
 - Include all `loops.overdue` entries (up to 2), formatted as:
-  `- [ ] ({size}) [{due_date}] {loop title}  ← OVERDUE`
+  `- [ ] ({size}) [{due_date}] {loop title}  <- OVERDUE`
 
 **Source 2 — Yesterday's `Tomorrow:` items:**
 - Format each as a new task line: `- [ ] {item}`
@@ -111,8 +100,6 @@ Call `backbone_write_draft('daily-YYYY-MM-DD.md', content)` with:
 - **Tomorrow:**
 ```
 
-The `Energy:` and `Deep work:` fields are left blank for the human to fill in at day end.
-
 ### Step 5 — Print terminal summary
 
 ```
@@ -131,17 +118,17 @@ To use: mv drafts/daily-YYYY-MM-DD.md {shed}/daily/YYYY-MM-DD.md
 ## Intention Quality Guidelines
 
 **Prefer specificity over vagueness:**
-- `- [ ] (S) [2026-03-03] Kick off AER CMP Phase 0 onsite session` ← good
-- `- [ ] Work on projects` ← bad
+- `- [ ] (S) [2026-03-03] Kick off #acme Phase 0 onsite session` <- good
+- `- [ ] Work on projects` <- bad
 
 **For carried intentions, add context about why it didn't get done (if known):**
-- If yesterday's blocked section mentioned it: append `  ← blocked: {reason}`
-- Example: `- [ ] (M) Ship citco-columnmapping  ← blocked: waiting on TAR approval`
+- If yesterday's blocked section mentioned it: append `  <- blocked: {reason}`
+- Example: `- [ ] (M) Ship #customer-slug deliverable  <- blocked: waiting on approval`
 
 **Respect the WIP cap:** 5 tasks maximum. If today has 4+ hours of meetings (from calendar
 context if available), cap at 3 tasks. Better to finish 3 than to plan 5 and feel behind.
 
-**Energy-aware scheduling:** If yesterday's energy score was ≤ 2/5, open today's note with
+**Energy-aware scheduling:** If yesterday's energy score was <= 2/5, open today's note with
 a gentle note: `> Low energy day — consider 2 tasks max and one clear win.`
 
 ---
@@ -163,7 +150,7 @@ a gentle note: `> Low energy day — consider 2 tasks max and one clear win.`
 import os, json
 from datetime import date, timedelta
 
-SHED = os.path.expanduser("~/Repos/adzekit-workspace")
+SHED = os.path.expanduser("~/adzekit")
 today = date.today()
 yesterday = today - timedelta(days=1)
 
