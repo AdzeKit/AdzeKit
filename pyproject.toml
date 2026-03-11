@@ -6,7 +6,6 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
-    "fastmcp>=2.12.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "pyyaml>=6.0.0",
@@ -16,11 +15,6 @@ dependencies = [
 [project.optional-dependencies]
 ai = [
     "anthropic>=0.40.0",
-]
-gmail = [
-    "google-api-python-client>=2.100.0",
-    "google-auth-oauthlib>=1.2.0",
-    "google-auth-httplib2>=0.2.0",
 ]
 ui = [
     "fastapi>=0.115.0",
@@ -37,8 +31,6 @@ dev = [
 
 [project.scripts]
 adzekit = "adzekit.cli:main"
-adzekit-mcp-gmail = "adzekit.mcp.gmail_server:main"
-adzekit-mcp-backbone = "adzekit.mcp.backbone_server:main"
 
 [build-system]
 requires = ["hatchling"]

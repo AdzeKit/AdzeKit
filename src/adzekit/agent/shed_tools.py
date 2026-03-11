@@ -1,13 +1,13 @@
 """Shed tools for the AdzeKit agent.
 
 The agent can READ the backbone (daily, loops, projects, knowledge, reviews,
-inbox) but CANNOT WRITE to it. The backbone is the human's domain.
+bench) but CANNOT WRITE to it. The backbone is the human's domain.
 
 The agent CAN WRITE to two areas:
   - stock/   Raw materials, transcripts, downloads.
   - drafts/  Agent-generated proposals awaiting human approval.
 
-When the agent wants to suggest a loop, inbox item, or any backbone change,
+When the agent wants to suggest a loop, bench item, or any backbone change,
 it writes a proposal to drafts/ for the human to review and apply.
 """
 
@@ -19,7 +19,7 @@ from adzekit.agent.tools import registry
 from adzekit.config import Settings, get_settings
 from adzekit.models import Loop
 from adzekit.parser import format_loop
-from adzekit.preprocessor import load_daily_note, load_open_loops, load_projects
+from adzekit.preprocessor import load_active_loops, load_daily_note, load_projects
 
 
 def _settings() -> Settings:
@@ -32,11 +32,11 @@ def _settings() -> Settings:
 
 
 @registry.register(
-    name="shed_get_open_loops",
-    description="Get all open loops (commitments) from the shed. Read-only.",
+    name="shed_get_active_loops",
+    description="Get all active loops (commitments) from the shed. Read-only.",
 )
-def shed_get_open_loops() -> str:
-    loops = load_open_loops(_settings())
+def shed_get_active_loops() -> str:
+    loops = load_active_loops(_settings())
     if not loops:
         return json.dumps({"count": 0, "loops": []})
     result = []
@@ -72,14 +72,14 @@ def shed_get_today() -> str:
 
 
 @registry.register(
-    name="shed_get_inbox",
-    description="Read the shed inbox (quick capture items). Read-only.",
+    name="shed_get_bench",
+    description="Read the shed bench (pending triage items and quick captures). Read-only.",
 )
-def shed_get_inbox() -> str:
+def shed_get_bench() -> str:
     settings = _settings()
-    if not settings.inbox_path.exists():
+    if not settings.bench_path.exists():
         return json.dumps({"content": ""})
-    content = settings.inbox_path.read_text(encoding="utf-8")
+    content = settings.bench_path.read_text(encoding="utf-8")
     return json.dumps({"content": content})
 
 
@@ -167,34 +167,34 @@ Copy the line above into `loops/open.md`.
 
 
 @registry.register(
-    name="shed_propose_inbox_item",
+    name="shed_propose_bench_item",
     description=(
-        "Propose an item to add to the shed inbox. Writes a proposal to drafts/ "
-        "for the human to review. Does NOT modify inbox.md."
+        "Propose an item to add to the shed bench. Writes a proposal to drafts/ "
+        "for the human to review. Does NOT modify bench.md."
     ),
     param_descriptions={
-        "text": "The text to propose adding to the inbox.",
+        "text": "The text to propose adding to the bench.",
     },
 )
-def shed_propose_inbox_item(text: str) -> str:
+def shed_propose_bench_item(text: str) -> str:
     settings = _settings()
     entry = f"- [{date.today().isoformat()}] {text}"
 
     drafts = settings.drafts_dir
     drafts.mkdir(parents=True, exist_ok=True)
-    proposal_path = drafts / f"inbox-{date.today().isoformat()}-{_slug(text[:40])}.md"
+    proposal_path = drafts / f"bench-{date.today().isoformat()}-{_slug(text[:40])}.md"
 
-    content = f"""# Proposed Inbox Item
+    content = f"""# Proposed Bench Item
 
 {entry}
 
 ## To apply
-Copy the line above into `inbox.md`.
+Copy the line above into the `## Quick Capture` section of `bench.md`.
 """
     proposal_path.write_text(content, encoding="utf-8")
 
     return json.dumps({
-        "action": "propose_inbox_item",
+        "action": "propose_bench_item",
         "formatted": entry,
         "proposal_file": str(proposal_path.name),
         "note": "Proposal saved to drafts/. Human must review and apply.",

@@ -8,7 +8,7 @@ from adzekit.workspace import create_daily_note, create_project, init_shed
 def test_init_shed_creates_directories(workspace):
     init_shed(workspace)
     assert workspace.loops_dir.exists()
-    assert workspace.loops_closed_dir.exists()
+    assert workspace.loops_archive_dir.exists()
     assert workspace.active_dir.exists()
     assert workspace.backlog_dir.exists()
     assert workspace.archive_dir.exists()
@@ -21,9 +21,9 @@ def test_init_shed_creates_directories(workspace):
 
 def test_init_shed_seeds_files(workspace):
     init_shed(workspace)
-    assert workspace.inbox_path.exists()
-    assert workspace.loops_open.exists()
-    assert "Inbox" in workspace.inbox_path.read_text()
+    assert workspace.bench_path.exists()
+    assert workspace.loops_active.exists()
+    assert "Bench" in workspace.bench_path.read_text()
 
 
 def test_create_daily_note(workspace):

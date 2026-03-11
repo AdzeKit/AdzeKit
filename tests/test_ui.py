@@ -59,8 +59,8 @@ def test_api_today(client):
     assert "exists" in data
 
 
-def test_api_inbox(client):
-    response = client.get("/api/inbox")
+def test_api_bench(client):
+    response = client.get("/api/bench")
     assert response.status_code == 200
     data = response.json()
     assert "content" in data

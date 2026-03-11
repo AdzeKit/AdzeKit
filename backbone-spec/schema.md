@@ -10,8 +10,10 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
   daily/
     YYYY-MM-DD.md
   loops/
-    open.md
-    closed/
+    active.md
+    backlog.md
+    archive.md
+    archive/
       YYYY-WNN.md
   projects/               # .md files here are active projects
     <slug>.md
@@ -23,7 +25,7 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
     <slug>.md
   reviews/
     YYYY-WNN.md
-  inbox.md
+  bench.md
   stock/                  # git-ignored, synced separately
     <project-slug>/
       <any file>
@@ -39,14 +41,14 @@ The shed has two access zones:
 
 Everything above except `stock/` and `drafts/`. The backbone is the human's domain -- agents can read it but never write to it. All backbone changes go through the human via the CLI or editor.
 
-Backbone directories: `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `inbox.md`.
+Backbone directories: `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `bench.md`.
 
 ### Workbench (agent-writable)
 
 Two directories where the agent can freely create and modify files:
 
 - **`stock/`** -- Raw material that hasn't been shaped yet (transcripts, PDFs, exports). Synced via rclone.
-- **`drafts/`** -- Agent-generated proposals awaiting human review. When the agent wants to suggest a new loop, inbox item, or any backbone change, it writes a proposal here. The human reviews and applies (or discards) the draft.
+- **`drafts/`** -- Agent-generated proposals awaiting human review. When the agent wants to suggest a new loop, bench item, or any backbone change, it writes a proposal here. The human reviews and applies (or discards) the draft.
 
 Both directories are git-ignored.
 
@@ -100,7 +102,7 @@ Subdirectories inside `stock/` match project slugs so LLM adapters can find the 
 
 **Path:** `drafts/`
 
-Agent-generated proposals awaiting human review. The agent writes here when it wants to suggest changes to the backbone (new loops, inbox items, triage summaries, etc.). The human reviews each draft and either applies it to the backbone or discards it.
+Agent-generated proposals awaiting human review. The agent writes here when it wants to suggest changes to the backbone (new loops, bench items, triage summaries, etc.). The human reviews each draft and either applies it to the backbone or discards it.
 
 Drafts are **not tracked by git**. They are ephemeral by nature -- once applied or discarded, they can be deleted.
 
@@ -157,9 +159,13 @@ One file per calendar day. The date is the filename.
 
 ## Loops
 
-A loop is any commitment to another person that requires closure.
+A loop is any commitment to another person that requires closure. Loops use the same active/backlog/archive lifecycle as projects.
 
-**Path:** `loops/open.md`
+**Paths:**
+- `loops/active.md` -- loops you are actively working on
+- `loops/backlog.md` -- future commitments not currently top of mind
+- `loops/archive.md` -- completed loops (flat log)
+- `loops/archive/YYYY-WNN.md` -- weekly archive snapshots (optional)
 
 Loops use a flat checklist format with an inline created date in square brackets:
 
@@ -174,26 +180,37 @@ Loops use a flat checklist format with an inline created date in square brackets
 Example:
 
 ```markdown
-# Open Loops
+# Active Loops
 
 - [ ] (XS) [2026-02-17] Follow up with Alice on API estimate
 - [ ] (M) [2026-02-18] Start column mapping work with Jas (2026-03-01)
 - [ ] (S) [2026-02-19] Get Acme docs for gateway diagnosis
 ```
 
+Backlog loops follow the same format but live in `backlog.md`:
+
+```markdown
+# Backlog Loops
+
+- [ ] (M) [2026-02-20] Research new API framework options (2026-06-01)
+- [ ] (S) [2026-02-21] Plan team offsite logistics
+```
+
+Move loops between `active.md` and `backlog.md` by cutting and pasting lines. When a backlog loop becomes urgent, promote it to active. When an active loop can wait, demote it to backlog.
+
 ### Closing loops
 
-Mark a loop done by flipping `[ ]` to `[x]` in `open.md`, then run `adzekit sweep`. Sweep:
+Mark a loop done by flipping `[ ]` to `[x]` in `active.md`, then run `adzekit sweep`. Sweep:
 
-1. Removes all `[x]` lines from `open.md`.
+1. Removes all `[x]` lines from `active.md`.
 2. Overwrites each loop's inline `[YYYY-MM-DD]` with today's date (the **closure date**).
-3. Appends them to `closed.md`.
+3. Appends them to `archive.md`.
 
 ```markdown
 - [x] (L) [2026-02-23] Gartner DSML Survey (2026-02-18)
 ```
 
-The original creation date is not lost -- it is preserved in git history as the commit that first added the line to `open.md`. The inline date shifts meaning from "when was this opened?" to "when was this closed?" because the file it lives in already answers which state it's in.
+The original creation date is not lost -- it is preserved in git history as the commit that first added the line to `active.md`. The inline date shifts meaning from "when was this opened?" to "when was this closed?" because the file it lives in already answers which state it's in.
 
 ### Loop identity and git traceability
 
@@ -256,17 +273,48 @@ Evergreen notes. The slug is the filename.
 Content goes here. Use standard [markdown links](../knowledge/other-note.md) to connect to other notes.
 ```
 
-## Inbox
+## Bench
 
-**Path:** `inbox.md`
+**Path:** `bench.md`
 
-Zero-structure capture bucket:
+The bench is the workbench where you lay out agent proposals and decide
+what to do with each one. In woodworking, the bench is the
+decision-making surface -- you bring pieces here to evaluate, route, or
+discard. In AdzeKit, the bench surfaces pending items from `drafts/` for
+human processing.
+
+The bench replaced the original `inbox.md` (a freeform capture bucket
+that went unused because daily `## Log` already handles quick capture
+and loops handle commitments directly).
 
 ```markdown
-# Inbox
+# Bench
 
-- [YYYY-MM-DD] Raw thought or commitment
+## Pending
+- [ ] [2026-03-05 14:30] inbox-zero -- 13 actions, 2 drafts (drafts/inbox-zero-2026-03-05-1430.md)
+- [ ] [2026-03-05 17:00] slack-digest -- 7 DMs, 4 threads (drafts/slack-digest-2026-03-05-1700.md)
+
+## Quick Capture
+- [2026-03-05] Unrouted thought that needs a home
 ```
+
+### Processing rules
+
+1. The agent appends an entry to `## Pending` whenever it writes a new
+   file to `drafts/`. The entry links to the draft file and summarizes
+   what needs human action.
+2. The human marks items `[x]` after processing (copying loops, reading
+   starred emails, applying proposals).
+3. `adzekit sweep` clears checked items from `## Pending` and optionally
+   deletes the corresponding draft file.
+4. `## Quick Capture` retains the original inbox role for the rare
+   orphan thought, but it is a secondary purpose.
+
+### CLI: `adzekit cull`
+
+`adzekit cull` scans `drafts/` for files not yet listed in `## Pending`
+and appends entries for them. It is idempotent -- running it twice
+produces no duplicates.
 
 ## Reviews
 

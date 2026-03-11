@@ -102,19 +102,13 @@ class Settings(BaseSettings):
 
     agent_backend: str = Field(
         default="isaac",
-        description=(
-            "Agent backend for the web UI chat. "
-            "Options: 'isaac' (dbexec repo run isaac), 'claude' (claude CLI), "
-            "'local' (direct Anthropic API, no MCP). "
-            "Set via ADZEKIT_AGENT_BACKEND or agent_backend in .adzekit."
-        ),
+        description="Agent backend for the web UI chat (isaac via dbexec).",
     )
 
     agent_timeout: int = Field(
         default=600,
         description=(
-            "Seconds to wait for an agent response before timing out. "
-            "Isaac/Claude Code calls that use MCP tools can take several minutes. "
+            "Seconds to wait for an Isaac response before timing out. "
             "Set via ADZEKIT_AGENT_TIMEOUT or agent_timeout in .adzekit."
         ),
     )
@@ -164,12 +158,20 @@ class Settings(BaseSettings):
         return self.shed / "loops"
 
     @property
-    def loops_open(self) -> Path:
-        return self.loops_dir / "open.md"
+    def loops_active(self) -> Path:
+        return self.loops_dir / "active.md"
 
     @property
-    def loops_closed_dir(self) -> Path:
-        return self.loops_dir / "closed"
+    def loops_backlog(self) -> Path:
+        return self.loops_dir / "backlog.md"
+
+    @property
+    def loops_archive(self) -> Path:
+        return self.loops_dir / "archive.md"
+
+    @property
+    def loops_archive_dir(self) -> Path:
+        return self.loops_dir / "archive"
 
     @property
     def projects_dir(self) -> Path:
@@ -200,8 +202,8 @@ class Settings(BaseSettings):
         return self.shed / "reviews"
 
     @property
-    def inbox_path(self) -> Path:
-        return self.shed / "inbox.md"
+    def bench_path(self) -> Path:
+        return self.shed / "bench.md"
 
     @property
     def stock_dir(self) -> Path:
@@ -325,7 +327,7 @@ class Settings(BaseSettings):
         """Create the full shed directory tree."""
         for d in [
             self.loops_dir,
-            self.loops_closed_dir,
+            self.loops_archive_dir,
             self.projects_dir,
             self.backlog_dir,
             self.archive_dir,
@@ -337,7 +339,7 @@ class Settings(BaseSettings):
         ]:
             d.mkdir(parents=True, exist_ok=True)
 
-        for f in [self.loops_open, self.inbox_path]:
+        for f in [self.loops_active, self.loops_backlog, self.bench_path]:
             if not f.exists():
                 f.write_text("", encoding="utf-8")
 
@@ -489,7 +491,7 @@ def set_global_shed(shed_path: Path) -> None:
     """Write the shed path to the global config file (~/.config/adzekit/config).
 
     Called by `adzekit set-shed`. Persists across sessions and terminal resets.
-    All AdzeKit tools and MCP servers pick this up via get_settings().
+    All AdzeKit tools pick this up via get_settings().
     """
     GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = _parse_kv_file(GLOBAL_CONFIG_PATH) if GLOBAL_CONFIG_PATH.exists() else {}
@@ -510,5 +512,26 @@ def get_settings() -> Settings:
         if GLOBAL_CONFIG_PATH.exists():
             data = _parse_kv_file(GLOBAL_CONFIG_PATH)
             if "shed" in data:
-                return Settings(shed=Path(data["shed"]).expanduser())
-    return Settings()
+                settings = Settings(shed=Path(data["shed"]).expanduser())
+                _check_backbone_version(settings)
+                return settings
+    settings = Settings()
+    _check_backbone_version(settings)
+    return settings
+
+
+def _check_backbone_version(settings: Settings) -> None:
+    """Warn if the shed's backbone version doesn't match the code."""
+    import warnings
+
+    if not settings.is_initialized:
+        return
+    shed_ver = settings.shed_backbone_version
+    if shed_ver is not None and shed_ver != BACKBONE_VERSION:
+        warnings.warn(
+            f"Shed backbone version ({shed_ver}) does not match "
+            f"AdzeKit code version ({BACKBONE_VERSION}). "
+            f"Run 'adzekit init' to update the marker.",
+            UserWarning,
+            stacklevel=3,
+        )

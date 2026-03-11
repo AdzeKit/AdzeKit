@@ -21,24 +21,34 @@ def init_shed(settings: Settings | None = None) -> Path:
     today = date.today()
     iso = today.isoformat()
 
-    # Seed inbox.md if empty
-    if settings.inbox_path.stat().st_size == 0:
-        settings.inbox_path.write_text(
-            f"""# Inbox
+    # Seed bench.md if empty
+    if settings.bench_path.stat().st_size == 0:
+        settings.bench_path.write_text(
+            f"""# Bench
 
-Capture anything here. No structure needed.
+## Pending
 
+## Quick Capture
 - [{iso}] Example: remember to follow up with Alice about the API estimate
 """,
             encoding="utf-8",
         )
 
-    # Seed loops/open.md with an example loop if empty
-    if settings.loops_open.stat().st_size == 0:
-        settings.loops_open.write_text(
-            f"""# Open Loops
+    # Seed loops/active.md with an example loop if empty
+    if settings.loops_active.stat().st_size == 0:
+        settings.loops_active.write_text(
+            f"""# Active Loops
 
 - [ ] (S) [{iso}] Send Alice the API estimate
+""",
+            encoding="utf-8",
+        )
+
+    # Seed loops/backlog.md if empty
+    if settings.loops_backlog.stat().st_size == 0:
+        settings.loops_backlog.write_text(
+            """# Backlog Loops
+
 """,
             encoding="utf-8",
         )
@@ -83,8 +93,8 @@ def create_review(
     path.write_text(
         f"""# {year} Week {week_num:02d} Review ({iso})
 
-## Open Loops
-- Review all loops in `loops/open.md`
+## Active Loops
+- Review all loops in `loops/active.md`
 - For each: act on it, schedule it, or close it
 
 ## Active Projects

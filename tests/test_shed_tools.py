@@ -23,14 +23,14 @@ def shed_registry(workspace, monkeypatch):
     reg = ToolRegistry()
 
     from adzekit.config import get_settings
-    from adzekit.preprocessor import load_open_loops
+    from adzekit.preprocessor import load_active_loops
 
     def _settings():
         return get_settings()
 
-    @reg.register(name="shed_get_open_loops", description="Get open loops.")
-    def shed_get_open_loops() -> str:
-        loops = load_open_loops(_settings())
+    @reg.register(name="shed_get_active_loops", description="Get active loops.")
+    def shed_get_active_loops() -> str:
+        loops = load_active_loops(_settings())
         result = []
         for loop in loops:
             result.append({
@@ -55,8 +55,8 @@ def shed_registry(workspace, monkeypatch):
     return reg
 
 
-def test_shed_get_open_loops(shed_registry):
-    result = shed_registry.call("shed_get_open_loops", {})
+def test_shed_get_active_loops(shed_registry):
+    result = shed_registry.call("shed_get_active_loops", {})
     parsed = json.loads(result)
     assert "count" in parsed
     assert isinstance(parsed["loops"], list)
@@ -78,6 +78,6 @@ def test_shed_save_summary(shed_registry, workspace):
 def test_shed_tools_read_only_backbone(shed_registry):
     """Verify the registry has no tools that write to backbone files."""
     tool_names = [t.name for t in shed_registry.list_tools()]
-    # No tool should directly add loops to open.md
+    # No tool should directly add loops to active.md
     assert "shed_add_loop" not in tool_names
-    assert "shed_add_to_inbox" not in tool_names
+    assert "shed_add_to_bench" not in tool_names

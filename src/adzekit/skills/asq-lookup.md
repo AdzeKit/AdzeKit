@@ -7,7 +7,20 @@ report to `drafts/` and drafts project stubs for unmatched ARs.
 ## Prerequisites
 
 - Salesforce CLI (`sf`) installed and authenticated
-- `adzekit-mcp-backbone` MCP server running
+
+---
+
+## Shed Access
+
+All backbone reads use the `Read` tool directly on shed files. Search uses `Grep`.
+Writes use `Write` to `{SHED}/drafts/`.
+
+| Data | Path |
+|------|------|
+| Active loops | `{SHED}/loops/active.md` |
+| Projects | `{SHED}/projects/*.md` (Glob, then Read each) |
+| Daily notes (2 weeks) | `{SHED}/daily/YYYY-MM-DD.md` (Read each day) |
+| Draft output | `{SHED}/drafts/{filename}` (Write tool) |
 
 ---
 
@@ -19,10 +32,7 @@ report to `drafts/` and drafts project stubs for unmatched ARs.
 SF_STATUS=$(sf org display --json 2>/dev/null | jq -r '.result.connectedStatus')
 ```
 
-If not `Connected`:
-```bash
-sf org login web --set-default
-```
+If not `Connected`: `sf org login web --set-default`
 
 ### Step 2 — Pull active ARs from Salesforce
 
@@ -45,17 +55,16 @@ sf data query --target-org "$SF_TARGET_ORG" --json \
 
 ### Step 3 — Load shed context
 
-Call all in parallel:
-- `backbone_get_projects()` → active projects with slugs, progress, task counts
-- `backbone_get_open_loops()` → all open loops
-- `backbone_get_week_notes()` → current week's dailies
-- `backbone_get_week_notes(PRIOR_WEEK)` → prior week's dailies
+Read all in parallel:
+- Glob `{SHED}/projects/*.md`, then Read each → project slugs, progress, task counts
+- Read `{SHED}/loops/active.md` → all active loops
+- Read `{SHED}/daily/YYYY-MM-DD.md` for each day in the current and prior week (14 days of dailies)
 
 ### Step 4 — Match ARs to projects
 
 For each AR, attempt to match a project slug:
 1. **Exact slug match** — normalize account name to slug form and check project slugs
-2. **Keyword search** — use `backbone_search(account_name, ["projects"])`
+2. **Keyword search** — use `Grep` to search project files for account name
 3. **Unmatched** — flag as MISSING for stub generation
 
 ### Step 5 — Run audit checks
@@ -64,22 +73,22 @@ For each AR, evaluate:
 
 - **[MISSING]** — no matched project slug (high severity)
 - **[OVERDUE]** — end date passed, still "In Progress"
-- **[STALE]** — no daily mentions in 14 days
+- **[STALE]** — no daily mentions in 14 days (use Grep across daily notes)
 - **[AT RISK]** — deadline within 7 days, progress < 50%
 - **[HOURS UNLOGGED]** — 0h consumed but daily mentions found
 - **[UNDERSIZED]** — many open tasks relative to remaining hours
 - **[SIZING MISMATCH]** — loop sizes don't match AR urgency
-- **[NO LOOPS]** — active AR with zero open loops
+- **[NO LOOPS]** — active AR with zero active loops
 - **[ORPHAN LOOP]** — loop references a completed/closed AR
 - **[UNTRACKED WORK]** — daily mentions with no loop
 
 ### Step 6 — Draft project stubs for unmatched ARs
 
-For each `[MISSING]` AR, generate a stub via `backbone_write_draft("SLUG.md", content)`.
+For each `[MISSING]` AR, use the `Write` tool to create `{SHED}/drafts/SLUG.md`.
 
 ### Step 7 — Write audit report
 
-Call `backbone_write_draft("asq-alignment-YYYY-MM-DD.md", content)` with summary table,
+Use `Write` to create `{SHED}/drafts/asq-alignment-YYYY-MM-DD.md` with summary table,
 detailed issues, project stubs created, and copy-paste `sf` update commands.
 
 ### Step 8 — Terminal output

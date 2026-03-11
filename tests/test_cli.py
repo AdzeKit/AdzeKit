@@ -9,9 +9,9 @@ def test_init_creates_shed(tmp_path):
     target = tmp_path / "shed"
     main(["init", str(target)])
 
-    assert (target / "inbox.md").exists()
-    assert (target / "loops" / "open.md").exists()
-    assert (target / "loops" / "closed").is_dir()
+    assert (target / "bench.md").exists()
+    assert (target / "loops" / "active.md").exists()
+    assert (target / "loops" / "archive").is_dir()
     assert (target / "daily").is_dir()
     assert (target / "projects").is_dir()
     assert (target / "projects" / "backlog").is_dir()
@@ -20,17 +20,17 @@ def test_init_creates_shed(tmp_path):
     assert (target / "reviews").is_dir()
     assert (target / "drafts").is_dir()
 
-    assert "Inbox" in (target / "inbox.md").read_text()
-    assert "Open Loops" in (target / "loops" / "open.md").read_text()
+    assert "Bench" in (target / "bench.md").read_text()
+    assert "Active Loops" in (target / "loops" / "active.md").read_text()
 
 
 def test_init_idempotent(tmp_path):
     target = tmp_path / "shed"
     main(["init", str(target)])
 
-    (target / "inbox.md").write_text("# My custom inbox\n")
+    (target / "bench.md").write_text("# My custom bench\n")
     main(["init", str(target)])
-    assert "My custom inbox" in (target / "inbox.md").read_text()
+    assert "My custom bench" in (target / "bench.md").read_text()
 
 
 def test_today_creates_daily_note(tmp_path):
@@ -54,7 +54,7 @@ def test_add_loop(tmp_path):
         "--due", "2026-02-20",
     ])
 
-    content = (target / "loops" / "open.md").read_text()
+    content = (target / "loops" / "active.md").read_text()
     assert "Send update to Alice" in content
     assert "(XS)" in content
     assert "(2026-02-20)" in content
@@ -72,7 +72,7 @@ def test_review_creates_weekly_review(tmp_path, capsys):
 
     content = review_path.read_text()
     assert "Review" in content
-    assert "Open Loops" in content
+    assert "Active Loops" in content
     assert "Reflection" in content
 
 
@@ -98,7 +98,7 @@ def test_status(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Active projects:" in output
-    assert "Open loops:" in output
+    assert "Active loops:" in output
 
 
 def test_setup_sync_no_rclone(tmp_path, monkeypatch, capsys):

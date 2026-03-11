@@ -61,8 +61,6 @@ uv run pytest
 +----------------------------------------------+
 |  AI Layer (agent/)                           |
 +----------------------------------------------+
-|  MCP Servers (mcp/)                          |
-+----------------------------------------------+
 |  Feature Layer (modules/)                    |
 +----------------------------------------------+
 |  Access Layer (config, models, parser,       |
@@ -76,11 +74,9 @@ uv run pytest
 
 **Feature Layer** (`modules/`) -- Loop lifecycle, WIP limits, git timestamps, tag scanning, export.
 
-**MCP Servers** (`mcp/`) -- Expose backbone and Gmail operations as MCP tools for Claude Code and other LLM agents.
-
 **AI Layer** (`agent/`) -- LLM client, tool registry, orchestrator. The agent can READ the backbone but CANNOT WRITE to it directly -- output goes to `drafts/`.
 
-**Skills** -- Claude Code slash commands (markdown files) that orchestrate MCP tools and agent capabilities into repeatable workflows. Skills live in your shed, not in the package.
+**Skills** -- Claude Code slash commands (markdown files) that orchestrate agent capabilities into repeatable workflows. Skills live in your shed, not in the package.
 
 ## Access Zones
 
@@ -88,21 +84,20 @@ The shed has two access zones that enforce human control:
 
 | Zone | Directories | Who writes | Purpose |
 |------|-------------|-----------|---------|
-| **Backbone** | `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `inbox.md` | Human only | Your real data -- plans, commitments, reflections |
+| **Backbone** | `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `bench.md` | Human only | Your real data -- plans, commitments, reflections |
 | **Workbench** | `drafts/`, `stock/` | Agent-writable | Proposals awaiting review, raw materials |
 
 When an AI agent wants to suggest a backbone change (new loop, triage summary, daily note), it writes a proposal to `drafts/`. You review and apply -- or discard. The human always decides.
 
 ## Skills & Claude Code Integration
 
-AdzeKit skills are Claude Code [slash commands](https://docs.anthropic.com/en/docs/claude-code/slash-commands) that combine MCP tools with AI reasoning to automate productivity workflows. They live in your shed's `.claude/commands/` directory.
+AdzeKit skills are Claude Code [slash commands](https://docs.anthropic.com/en/docs/claude-code/slash-commands) that automate productivity workflows. They live in your shed's `.claude/commands/` directory.
 
 ### How it works
 
-1. **MCP servers** expose your backbone as structured tools (read projects, get loops, write drafts)
-2. **Skills** are markdown files that tell Claude Code how to orchestrate those tools
-3. **The backbone stays human-protected** -- skills can only write to `drafts/`
-4. **You review everything** -- skills propose, you decide
+1. **Skills** are markdown files that tell Claude Code how to work with your backbone
+2. **The backbone stays human-protected** -- skills can only write to `drafts/`
+3. **You review everything** -- skills propose, you decide
 
 ### Included skill templates
 
@@ -136,30 +131,7 @@ argument-hint: Optional argument description
 ---
 ```
 
-Personalize the skills for your workflow -- add your name to draft reply signatures, configure your priority Slack channels in `knowledge/role-context.md`, set up email pattern files, etc. Your shed is yours; the repo stays generic.
-
-### MCP server setup
-
-Add these to your `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "adzekit-backbone": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/AdzeKit", "run", "adzekit-mcp-backbone"],
-      "env": { "ADZEKIT_SHED": "/path/to/your/shed" }
-    },
-    "adzekit-gmail": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/AdzeKit", "run", "adzekit-mcp-gmail"],
-      "env": { "ADZEKIT_SHED": "/path/to/your/shed" }
-    }
-  }
-}
-```
-
-Restart Claude Code to pick up the MCP servers.
+Personalize the skills for your workflow. Your shed is yours; the repo stays generic.
 
 ## Configuration
 

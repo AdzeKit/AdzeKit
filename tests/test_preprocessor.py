@@ -1,12 +1,12 @@
 """Tests for the loaders."""
 
 from adzekit.models import ProjectState
-from adzekit.preprocessor import load_open_loops, load_projects
+from adzekit.preprocessor import load_active_loops, load_projects
 from adzekit.workspace import create_project
 
 
-def test_load_open_loops_empty(workspace):
-    assert load_open_loops(workspace) == []
+def test_load_active_loops_empty(workspace):
+    assert load_active_loops(workspace) == []
 
 
 def test_load_projects_by_state(workspace):

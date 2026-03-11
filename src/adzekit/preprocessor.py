@@ -10,12 +10,23 @@ from adzekit.models import DailyNote, Loop, Project, ProjectState
 from adzekit.parser import parse_daily_note, parse_loops, parse_project
 
 
-def load_open_loops(settings: Settings | None = None) -> list[Loop]:
-    """Load all loops from loops/open.md."""
+def load_active_loops(settings: Settings | None = None) -> list[Loop]:
+    """Load all loops from loops/active.md."""
     settings = settings or get_settings()
-    if not settings.loops_open.exists():
+    if not settings.loops_active.exists():
         return []
-    text = settings.loops_open.read_text(encoding="utf-8")
+    text = settings.loops_active.read_text(encoding="utf-8")
+    if not text.strip():
+        return []
+    return parse_loops(text)
+
+
+def load_backlog_loops(settings: Settings | None = None) -> list[Loop]:
+    """Load all loops from loops/backlog.md."""
+    settings = settings or get_settings()
+    if not settings.loops_backlog.exists():
+        return []
+    text = settings.loops_backlog.read_text(encoding="utf-8")
     if not text.strip():
         return []
     return parse_loops(text)
