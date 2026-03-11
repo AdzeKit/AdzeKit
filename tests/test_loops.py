@@ -10,7 +10,7 @@ from adzekit.models import Loop
 from adzekit.modules.loops import (
     add_loop,
     close_loop,
-    get_open_loops,
+    get_active_loops,
     get_overdue_loops,
     loop_stats,
 )
@@ -30,7 +30,7 @@ def _make_loop(title="Test loop", who="Alice", days_ago=0, due_in=3):
 def test_add_and_read_loop(workspace):
     loop = _make_loop()
     add_loop(loop, workspace)
-    loops = get_open_loops(workspace)
+    loops = get_active_loops(workspace)
     assert len(loops) == 1
     assert loops[0].title == "Test loop"
     assert loops[0].due is not None
@@ -39,17 +39,17 @@ def test_add_and_read_loop(workspace):
 def test_close_loop(workspace):
     add_loop(_make_loop(title="Close me"), workspace)
     add_loop(_make_loop(title="Keep me"), workspace)
-    assert len(get_open_loops(workspace)) == 2
+    assert len(get_active_loops(workspace)) == 2
 
     result = close_loop("Close me", workspace)
     assert result is True
 
-    remaining = get_open_loops(workspace)
+    remaining = get_active_loops(workspace)
     assert len(remaining) == 1
     assert remaining[0].title == "Keep me"
 
-    # Verify it ended up in closed/
-    closed_files = list(workspace.loops_closed_dir.glob("*.md"))
+    # Verify it ended up in archive/
+    closed_files = list(workspace.loops_archive_dir.glob("*.md"))
     assert len(closed_files) == 1
 
 
@@ -75,5 +75,5 @@ def test_loop_stats(workspace):
     add_loop(_make_loop(title="A"), workspace)
     add_loop(_make_loop(title="B"), workspace)
     stats = loop_stats(workspace)
-    assert stats["open"] == 2
+    assert stats["active"] == 2
     assert "waiting" not in stats

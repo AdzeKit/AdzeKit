@@ -59,7 +59,7 @@ class TestParseLoops:
 
     def test_empty_text(self):
         assert parse_loops("") == []
-        assert parse_loops("# Open Loops\n\n") == []
+        assert parse_loops("# Active Loops\n\n") == []
 
     def test_roundtrip_structured(self):
         """Structured format parses correctly (legacy support)."""

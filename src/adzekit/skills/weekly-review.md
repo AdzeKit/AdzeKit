@@ -1,15 +1,23 @@
 # Weekly Review Skill
 
 Generate a weekly review draft and a copy-pasteable pulse summary from this week's daily logs,
-active projects, and open loops. Writes two sections to a single file in `drafts/`:
-`weekly-review-YYYY-WNN.md`.
+active projects, and active loops. Writes to `drafts/weekly-review-YYYY-WNN.md`.
 
 Never writes to backbone directories (loops/, projects/, daily/, reviews/).
 
-## Prerequisites
+---
 
-The `adzekit-backbone` MCP server should be running. If not, fall back to direct file reads
-from the shed.
+## Shed Access
+
+All reads use the `Read` tool directly on shed files. Writes use `Write` to `{SHED}/drafts/`.
+
+| Data | Path |
+|------|------|
+| Daily notes | `{SHED}/daily/YYYY-MM-DD.md` (for each day Mon-Sun) |
+| Active loops | `{SHED}/loops/active.md` |
+| Projects | `{SHED}/projects/*.md` (Glob, then Read each) |
+| Review stub | `{SHED}/reviews/YYYY-WNN.md` |
+| Draft output | `{SHED}/drafts/weekly-review-YYYY-WNN.md` (Write tool) |
 
 ---
 
@@ -23,18 +31,11 @@ Accept an optional argument `$ARGUMENTS` — if provided, interpret as an ISO we
 
 ### Step 2 — Load backbone context (all in parallel)
 
-**Via MCP (preferred):**
-```
-backbone_get_week_notes(iso_week=ISO_WEEK)
-backbone_get_projects()
-backbone_get_open_loops()
-```
-
-**Via direct file reads (fallback):**
-- Daily notes: `{shed}/daily/YYYY-MM-DD.md` for each day Mon-Sun
-- Open loops: `{shed}/loops/open.md`
-- Projects: `{shed}/projects/*.md` (active) and `{shed}/projects/backlog/*.md`
-- Review stub: `{shed}/reviews/YYYY-WNN.md`
+Read directly:
+- Daily notes: `{SHED}/daily/YYYY-MM-DD.md` for each day Mon-Sun of the target week
+- Active loops: `{SHED}/loops/active.md`
+- Projects: Glob `{SHED}/projects/*.md`, then Read each
+- Review stub: `{SHED}/reviews/YYYY-WNN.md` (if it exists)
 
 ### Step 3 — Read active project files for weekly activity
 
@@ -54,13 +55,13 @@ Build a structured summary by extracting:
 
 **Blockers/challenges:** `blocked:` sections in daily notes, overdue loops, project friction.
 
-**Next-week focus:** Open loops (especially M/L/XL), upcoming milestones, carried intentions.
+**Next-week focus:** Active loops (especially M/L/XL), upcoming milestones, carried intentions.
 
 **Project pulse:** For each active project, note if it moved this week or is stale.
 
 ### Step 5 — Write the review draft
 
-Call `backbone_write_draft('weekly-review-YYYY-WNN.md', content)` with:
+Use the `Write` tool to create `{SHED}/drafts/weekly-review-YYYY-WNN.md`:
 
 ```markdown
 # Weekly Review — YYYY-WNN
@@ -103,7 +104,7 @@ _(Mon YYYY-MM-DD → Sun YYYY-MM-DD)_
 
 ---
 
-## Open Loops
+## Active Loops
 
 **Due this week / overdue:**
 - [loop lines]
@@ -111,7 +112,7 @@ _(Mon YYYY-MM-DD → Sun YYYY-MM-DD)_
 **Coming up next week:**
 - [loops with due dates next week]
 
-**All open loops:** N total
+**All active loops:** N total
 
 ---
 
@@ -138,7 +139,7 @@ Generated: YYYY-MM-DD HH:MM
 Weekly Review complete — YYYY-WNN
   Daily notes: N/7 days found
   Projects:    N active, N backlog
-  Open loops:  N
+  Active loops:  N
   Draft:       drafts/weekly-review-YYYY-WNN.md
 ```
 
@@ -148,7 +149,7 @@ Weekly Review complete — YYYY-WNN
 
 - NEVER write to backbone directories: loops/, projects/, daily/, knowledge/, reviews/
 - Draft goes to drafts/ only — human promotes to reviews/ if they want
-- Do NOT close or modify open loops
+- Do NOT close or modify active loops
 - If a daily note is missing, note "(no note)" rather than inventing content
 
 ARGUMENTS: $ARGUMENTS

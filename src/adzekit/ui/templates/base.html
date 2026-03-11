@@ -198,9 +198,11 @@
         <a href="/daily" {% if active_page == 'daily' %}class="active"{% endif %}>Daily</a>
         <a href="/loops" {% if active_page == 'loops' %}class="active"{% endif %}>Loops</a>
         <a href="/projects" {% if active_page == 'projects' %}class="active"{% endif %}>Projects</a>
+        <a href="/knowledge" {% if active_page == 'knowledge' %}class="active"{% endif %}>Knowledge</a>
         <a href="/reviews" {% if active_page == 'reviews' %}class="active"{% endif %}>Reviews</a>
-        <a href="/inbox" {% if active_page == 'inbox' %}class="active"{% endif %}>Inbox</a>
+        <a href="/bench" {% if active_page == 'bench' %}class="active"{% endif %}>Bench</a>
         <a href="/agent" {% if active_page == 'agent' %}class="active"{% endif %}>Agent</a>
+        <a href="/guide" {% if active_page == 'guide' %}class="active"{% endif %}>Guide</a>
     </nav>
     <main>
         {% block content %}{% endblock %}

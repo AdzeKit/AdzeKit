@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title_suffix %} - Guide{% endblock %}
+
+{% block head %}
+<style>
+    .guide { max-width: 780px; }
+
+    .guide h1 {
+        margin-bottom: 0.5rem;
+    }
+
+    .guide .subtitle {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-bottom: 2rem;
+        font-style: italic;
+    }
+
+    .guide h2 {
+        margin-top: 2rem;
+        margin-bottom: 0.5rem;
+        text-transform: none;
+        font-size: 1.1rem;
+        letter-spacing: 0;
+        color: var(--accent);
+    }
+
+    .guide h3 {
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        color: var(--text);
+        margin-top: 1.25rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .guide p, .guide li {
+        color: var(--text);
+        font-size: 0.9rem;
+        line-height: 1.7;
+    }
+
+    .guide ul, .guide ol {
+        padding-left: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .guide li { margin-bottom: 0.3rem; }
+
+    .guide code {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 0.1rem 0.35rem;
+        border-radius: 3px;
+        color: var(--accent);
+    }
+
+    .principles {
+        display: grid;
+        gap: 0.75rem;
+        margin: 1rem 0;
+    }
+
+    .principle {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.85rem 1rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .principle-num {
+        font-family: var(--mono);
+        font-weight: 700;
+        color: var(--accent);
+        font-size: 0.85rem;
+        flex-shrink: 0;
+        width: 1.5rem;
+    }
+
+    .principle-body strong {
+        display: block;
+        font-size: 0.88rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .principle-body span {
+        font-size: 0.82rem;
+        color: var(--text-muted);
+    }
+
+    .zone-table {
+        width: 100%;
+        margin: 0.75rem 0 1rem;
+    }
+
+    .zone-table th {
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 0.82rem;
+    }
+
+    .zone-table td {
+        font-size: 0.85rem;
+    }
+
+    .backbone-map {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        margin: 0.75rem 0 1rem;
+    }
+
+    .map-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 0.6rem 0.75rem;
+    }
+
+    .map-item code {
+        display: block;
+        margin-bottom: 0.2rem;
+        border: none;
+        background: none;
+        padding: 0;
+        font-size: 0.85rem;
+    }
+
+    .map-item span {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+    }
+
+    @media (max-width: 640px) {
+        .backbone-map { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="guide">
+    <h1>// adzekit</h1>
+    <p class="subtitle">Prehistoric tools. Modern brains.</p>
+
+    <p>
+        AdzeKit is a markdown-native productivity workbench. Everything lives in plain text
+        files you own, edit with any tool, and version with git. No databases, no proprietary
+        formats, no lock-in.
+    </p>
+    <p>
+        The name comes from the <strong>adze</strong> -- one of the oldest woodworking tools.
+        Simple, durable, effective. The shed metaphor runs through the entire system:
+        your workspace is a <em>shed</em>, your files are the <em>backbone</em>,
+        raw materials sit in <em>stock</em>, and the <em>bench</em> is where you evaluate
+        agent proposals.
+    </p>
+
+    <h2>Five Principles</h2>
+
+    <div class="principles">
+        <div class="principle">
+            <span class="principle-num">1</span>
+            <div class="principle-body">
+                <strong>Cap Work-in-Progress</strong>
+                <span>Max 3 active projects and 5 daily focus tasks. If you want to start something new, finish or defer something first.</span>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="principle-num">2</span>
+            <div class="principle-body">
+                <strong>Close Every Loop</strong>
+                <span>Every commitment to another person gets a response within 24 hours. A loop stays open until explicitly closed with evidence.</span>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="principle-num">3</span>
+            <div class="principle-body">
+                <strong>Protect Deep Work</strong>
+                <span>Batch communications. Minimize context switches. Guard uninterrupted blocks for real thinking.</span>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="principle-num">4</span>
+            <div class="principle-body">
+                <strong>Human Always Decides</strong>
+                <span>Agents draft and suggest. You approve. The backbone is your domain -- AI writes proposals to drafts/, never to the backbone directly.</span>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="principle-num">5</span>
+            <div class="principle-body">
+                <strong>Boring Technology</strong>
+                <span>Markdown, git, the filesystem. No framework churn, no migration debt. The backbone spec outlasts every tool built on top of it.</span>
+            </div>
+        </div>
+    </div>
+
+    <h2>The Backbone</h2>
+
+    <p>
+        The backbone is the set of plain markdown files that hold your real data.
+        Any directory that conforms to the backbone spec is an AdzeKit-compatible shed.
+    </p>
+
+    <div class="backbone-map">
+        <div class="map-item">
+            <code>daily/</code>
+            <span>One file per day. Intentions, log, reflection.</span>
+        </div>
+        <div class="map-item">
+            <code>loops/</code>
+            <span>Commitments: active, backlog, archive.</span>
+        </div>
+        <div class="map-item">
+            <code>projects/</code>
+            <span>Active, backlog, archive. Context + log + notes.</span>
+        </div>
+        <div class="map-item">
+            <code>knowledge/</code>
+            <span>Evergreen notes. One concept per file.</span>
+        </div>
+        <div class="map-item">
+            <code>reviews/</code>
+            <span>Weekly review snapshots (ISO week).</span>
+        </div>
+        <div class="map-item">
+            <code>bench.md</code>
+            <span>Triage queue for agent proposals.</span>
+        </div>
+        <div class="map-item">
+            <code>stock/</code>
+            <span>Raw material: transcripts, PDFs, exports.</span>
+        </div>
+        <div class="map-item">
+            <code>drafts/</code>
+            <span>Agent-written proposals awaiting review.</span>
+        </div>
+    </div>
+
+    <h2>Access Zones</h2>
+
+    <p>
+        The shed is split into two zones that enforce human control:
+    </p>
+
+    <table class="zone-table">
+        <thead>
+            <tr>
+                <th>Zone</th>
+                <th>Directories</th>
+                <th>Who Writes</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Backbone</strong></td>
+                <td><code>daily/</code> <code>loops/</code> <code>projects/</code> <code>knowledge/</code> <code>reviews/</code> <code>bench.md</code></td>
+                <td>Human only</td>
+            </tr>
+            <tr>
+                <td><strong>Workbench</strong></td>
+                <td><code>stock/</code> <code>drafts/</code></td>
+                <td>Agent-writable</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Lifecycle Pattern</h2>
+
+    <p>
+        Both loops and projects follow the same three-state lifecycle:
+    </p>
+    <ul>
+        <li><strong>Active</strong> -- currently in progress, top of mind</li>
+        <li><strong>Backlog</strong> -- committed but not urgent, future work</li>
+        <li><strong>Archive</strong> -- completed, preserved for reference</li>
+    </ul>
+    <p>
+        Move items between states by moving the file (projects) or cutting/pasting
+        lines between files (loops). The filesystem <em>is</em> the state machine.
+    </p>
+
+    <h2>Key Commands</h2>
+
+    <ul>
+        <li><code>adzekit init</code> -- create a new shed</li>
+        <li><code>adzekit today</code> -- open or create today's daily note</li>
+        <li><code>adzekit sweep</code> -- move [x] loops from active to archive</li>
+        <li><code>adzekit cull</code> -- surface new drafts on the bench</li>
+        <li><code>adzekit status</code> -- shed health at a glance</li>
+        <li><code>adzekit serve</code> -- start this web UI</li>
+        <li><code>adzekit export</code> -- convert markdown to .docx</li>
+    </ul>
+</div>
+{% endblock %}

@@ -157,18 +157,38 @@ def _log_sweep_to_daily(count: int, settings: "Settings") -> None:
 
 
 def cmd_sweep(args: argparse.Namespace) -> None:
-    """Move all [x] loops from open.md to closed.md."""
+    """Move all [x] loops from active.md to archive.md."""
     from adzekit.modules.loops import sweep_closed
 
     settings = _resolve_settings(args)
     swept = sweep_closed(settings)
     if not swept:
-        print("Nothing to sweep -- no closed loops in open.md.")
+        print("Nothing to sweep -- no closed loops in active.md.")
     else:
         _log_sweep_to_daily(len(swept), settings)
         for loop in swept:
             print(f"  swept: {loop.title}")
-        print(f"\n{len(swept)} loop(s) moved to closed.md")
+        print(f"\n{len(swept)} loop(s) moved to archive.md")
+
+
+# -- cull ------------------------------------------------------------------
+
+
+def cmd_cull(args: argparse.Namespace) -> None:
+    """Scan drafts/ and update bench.md with pending items."""
+    from adzekit.modules.bench import cull
+
+    settings = _resolve_settings(args)
+    added, cleared = cull(settings)
+
+    if not added and not cleared:
+        print("Bench is up to date -- no new drafts, nothing to clear.")
+    else:
+        if cleared:
+            print(f"  cleared {cleared} processed item(s)")
+        if added:
+            print(f"  added {added} new draft(s) to bench")
+        print(f"\nBench updated: {settings.bench_path}")
 
 
 # -- add-loop --------------------------------------------------------------
@@ -310,7 +330,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"Shed: {settings.shed}")
     print(f"Active projects: {wip['active_projects']}/{wip['max_active_projects']}")
     print(f"Daily tasks: {wip['daily_tasks']}/{wip['max_daily_tasks']}")
-    print(f"Open loops: {loops['open']}")
+    print(f"Active loops: {loops['active']}")
     print(f"Overdue loops: {loops['overdue']}")
     print(f"Approaching SLA: {loops['approaching_sla']}")
 
@@ -346,25 +366,19 @@ def cmd_serve(args: argparse.Namespace) -> None:
 def cmd_agent(args: argparse.Namespace) -> None:
     """Run the agent with a one-shot message.
 
-    DEPRECATED: Use Claude Code with the AdzeKit MCP servers instead.
+    DEPRECATED: Use Claude Code instead.
     """
     import warnings
 
     warnings.warn(
         "`adzekit agent` is deprecated and will be removed in a future release.\n"
-        "Use Claude Code with the AdzeKit MCP servers instead:\n"
-        "  adzekit-mcp-gmail      — Gmail tools\n"
-        "  adzekit-mcp-backbone   — Backbone/shed tools\n"
-        "See the /inbox-zero skill for the recommended email workflow.",
+        "Use Claude Code with AdzeKit instead.",
         DeprecationWarning,
         stacklevel=1,
     )
     print(
-        "Deprecated: `adzekit agent` is superseded by Claude Code + AdzeKit MCP servers.\n"
-        "  Run adzekit-mcp-backbone and adzekit-mcp-gmail, then use the /inbox-zero skill.\n"
+        "Deprecated: `adzekit agent` is superseded by Claude Code.\n"
     )
-    # Import tools to register them
-    import adzekit.agent.gmail_tools  # noqa: F401
     import adzekit.agent.shed_tools  # noqa: F401
     from adzekit.agent.orchestrator import run_agent
 
@@ -398,8 +412,8 @@ def cmd_set_shed(args: argparse.Namespace) -> None:
     print(f"Shed configured: {shed_path}")
     print(f"Config saved:    {GLOBAL_CONFIG_PATH}")
     print()
-    print("All AdzeKit tools and MCP servers will now use this shed automatically.")
-    print("No need to set ADZEKIT_SHED in your environment or MCP server config.")
+    print("All AdzeKit tools will now use this shed automatically.")
+    print("No need to set ADZEKIT_SHED in your environment.")
 
 
 # -- sync ------------------------------------------------------------------
@@ -523,8 +537,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_review.set_defaults(func=cmd_review)
 
     # sweep
-    p_sweep = sub.add_parser("sweep", help="Move [x] loops from open.md to closed.md.")
+    p_sweep = sub.add_parser("sweep", help="Move [x] loops from active.md to archive.md.")
     p_sweep.set_defaults(func=cmd_sweep)
+
+    # cull
+    p_cull = sub.add_parser("cull", help="Scan drafts/ and update bench with pending items.")
+    p_cull.set_defaults(func=cmd_cull)
 
     # add-loop
     p_loop = sub.add_parser("add-loop", help="Add a loop to open.md.")

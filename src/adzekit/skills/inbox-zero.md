@@ -6,12 +6,47 @@ to `drafts/`, and updates the email patterns memory file.
 
 ## Prerequisites
 
-Both AdzeKit MCP servers must be running and configured in `.claude/settings.json`:
-- `adzekit-mcp-backbone` — backbone read + drafts write
-- `adzekit-mcp-gmail` — Gmail read + archive + label + draft
+- `gcloud auth application-default print-access-token` must return a valid token
+- Shed directory available (ADZEKIT_SHED env var or default `~/adzekit`)
 
-If not using MCP, authenticate with: `TOKEN=$(gcloud auth application-default print-access-token)`
-and use the Gmail API directly (see Step 2b below).
+---
+
+## Shed Access
+
+All backbone reads use the `Read` tool directly on shed files. All writes go to `{SHED}/drafts/`
+using the `Write` tool.
+
+| Data | Path |
+|------|------|
+| Active loops | `{SHED}/loops/active.md` |
+| Projects | `{SHED}/projects/*.md` (Glob, then Read each) |
+| Email patterns | `{SHED}/drafts/email-patterns.md` |
+| Daily note | `{SHED}/daily/YYYY-MM-DD.md` |
+| Draft output | `{SHED}/drafts/{filename}` (Write tool) |
+
+## Gmail Access
+
+All Gmail operations use `gcloud` + `curl` via Bash. Obtain a token once per run:
+
+```bash
+TOKEN=$(gcloud auth application-default print-access-token)
+BASE="https://gmail.googleapis.com/gmail/v1/users/me"
+```
+
+Use Python scripts via Bash for batch operations (concurrent requests with urllib).
+
+| Operation | Method |
+|-----------|--------|
+| List inbox | `GET $BASE/messages?q=in:inbox&maxResults=100` |
+| Get metadata | `GET $BASE/messages/{id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To&metadataHeaders=Cc` |
+| Get full body | `GET $BASE/messages/{id}?format=full` (decode payload body from base64url) |
+| Archive | `POST $BASE/messages/{id}/modify` body: `{"removeLabelIds":["INBOX"]}` |
+| Mark read | `POST $BASE/messages/{id}/modify` body: `{"removeLabelIds":["UNREAD"]}` |
+| Star | `POST $BASE/messages/{id}/modify` body: `{"addLabelIds":["STARRED"]}` |
+| Add label | `POST $BASE/messages/{id}/modify` body: `{"addLabelIds":["LABEL_ID"]}` |
+| Batch modify | `POST $BASE/messages/batchModify` body: `{"ids":[...],"addLabelIds":[...],"removeLabelIds":[...]}` |
+| List labels | `GET $BASE/labels` (cache label IDs on first lookup) |
+| Create draft | `POST $BASE/drafts` body: `{"message":{"raw":"BASE64","threadId":"THREAD_ID"}}` |
 
 ---
 
@@ -19,15 +54,15 @@ and use the Gmail API directly (see Step 2b below).
 
 ### Step 1 — Load context
 
-Call all three in parallel:
-- `backbone_get_projects()` → extract project slugs and titles as customer context hints
-- `backbone_get_open_loops()` → extract who/titles as active customer context
-- `backbone_get_email_patterns()` → load known junk senders, notification sources, customer domains, and notes
+Read all three in parallel using the Read tool:
+- `{SHED}/projects/*.md` — Glob to list, then Read each. Extract project slugs and titles.
+- `{SHED}/loops/active.md` — extract who/titles as active customer context
+- `{SHED}/drafts/email-patterns.md` — load known junk senders, notification sources, customer domains, notes
 
 Build a working context block:
 ```
-CUSTOMER HINTS: <project slugs from backbone_get_projects()>
-OPEN LOOPS WITH: <who values from open loops>
+CUSTOMER HINTS: <project slugs>
+OPEN LOOPS WITH: <who values from active loops>
 KNOWN JUNK: <senders from email-patterns.md>
 KNOWN NOTIFICATIONS: <senders from email-patterns.md>
 CUSTOMER DOMAINS: <domains from email-patterns.md>
@@ -36,28 +71,35 @@ NOTES: <notes from email-patterns.md>
 
 ### Step 2 — Fetch inbox
 
-**Via MCP (preferred):**
-```
-gmail_get_inbox(max_results=100)
+Use a Python script via Bash to fetch all inbox messages efficiently:
+
+```python
+# Run via Bash tool
+import urllib.request, json, subprocess, base64
+
+token = subprocess.run(["gcloud", "auth", "application-default", "print-access-token"],
+                       capture_output=True, text=True).stdout.strip()
+base = "https://gmail.googleapis.com/gmail/v1/users/me"
+headers = {"Authorization": f"Bearer {token}", "x-goog-user-project": "gcp-sandbox-field-eng"}
+
+# 1. Get message IDs
+req = urllib.request.Request(f"{base}/messages?q=in:inbox&maxResults=100", headers=headers)
+ids = [m["id"] for m in json.loads(urllib.request.urlopen(req).read()).get("messages", [])]
+
+# 2. Fetch metadata for all IDs
+for mid in ids:
+    url = f"{base}/messages/{mid}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To&metadataHeaders=Cc"
+    req = urllib.request.Request(url, headers=headers)
+    m = json.loads(urllib.request.urlopen(req).read())
+    hdrs = {h["name"]: h["value"] for h in m.get("payload", {}).get("headers", [])}
+    print(json.dumps({"id": m["id"], "from": hdrs.get("From",""), "to": hdrs.get("To",""),
+                       "cc": hdrs.get("Cc",""), "subject": hdrs.get("Subject",""),
+                       "date": hdrs.get("Date",""), "snippet": m.get("snippet",""),
+                       "labels": m.get("labelIds",[]), "threadId": m.get("threadId","")}))
 ```
 
-**Via Gmail API (fallback if MCP not available):**
-```bash
-TOKEN=$(gcloud auth application-default print-access-token)
-# Fetch 100 message IDs
-curl -s "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=100" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Fetch metadata for all IDs
-for ID in <ids>; do
-  curl -s "https://gmail.googleapis.com/gmail/v1/users/me/messages/${ID}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date" \
-    -H "Authorization: Bearer $TOKEN"
-done
-```
-
-For emails whose snippet suggests they are DIRECT, URGENT, or REVIEW, fetch the full body:
-- MCP: `gmail_read_email(message_id)`
-- API: `?format=full` then decode `payload.body.data` from base64
+For emails whose snippet suggests they are DIRECT, URGENT, or REVIEW, fetch the full body
+using `?format=full` and decode `payload.body.data` or `payload.parts[].body.data` from base64url.
 
 ### Step 3 — Classify all emails
 
@@ -77,7 +119,7 @@ specific event, meeting, deadline, or time-sensitive ask:
 |----------|-------------|-------------|
 | **URGENT** | Active escalation or something genuinely blocked right now | Sender explicitly says something is broken/blocked/down today; executive sender with a direct ask; high confidence of immediate impact |
 | **DIRECT** | Clear personal ask requiring a reply or decision | Your name in To, explicit question or request, external email with a genuine open ask |
-| **REVIEW** | Pertinent information you should read but need not reply to | Industry news relevant to active projects; important internal announcements; customer signals; significant competitive or market intelligence |
+| **REVIEW** | Pertinent information you should read but need not reply to | Industry news relevant to active projects; important internal announcements; customer signals; significant competitive intelligence |
 | **CHATTER** | Internal discussion or FYI with no personal action | Mailing list, announcement, internal thread where you are CC'd but not asked anything |
 | **NOTIFICATION** | Automated system email | GitHub, Jira, CI/CD, calendar invites (always — even from real people), Slack digests, newsletters from known services |
 | **JUNK** | Marketing or unsubscribe-eligible | Bulk mail headers, prominent unsubscribe link, no personal relevance |
@@ -91,42 +133,57 @@ specific event, meeting, deadline, or time-sensitive ask:
 - Meeting invites for **past meetings** → STALE, not DIRECT. Calendar noise → NOTIFICATION.
 - If genuinely unsure between URGENT and DIRECT, prefer DIRECT.
 - If genuinely unsure between DIRECT and CHATTER, prefer DIRECT only if user is in To (not just CC).
-- If genuinely unsure between REVIEW and CHATTER, prefer REVIEW only if the content is genuinely novel and relevant to active work — don't star noise.
+- If genuinely unsure between REVIEW and CHATTER, prefer REVIEW only if genuinely novel and relevant.
 
 Process in batches of ~20 emails at a time for manageable context. Keep a running tally.
 
 ### Step 4 — Apply Gmail actions
 
-Apply actions in batches where possible.
+Cache label IDs from `GET $BASE/labels` first. Use batch operations where possible.
 
 **JUNK, NOTIFICATION, and CHATTER:**
-- MCP: `gmail_archive_batch([list of IDs])` then `gmail_mark_read` for each
-- API: `POST /messages/batchModify` with `removeLabelIds: ["INBOX", "UNREAD"]`
+```bash
+curl -s -X POST "$BASE/messages/batchModify" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"ids":["ID1","ID2",...],"removeLabelIds":["INBOX","UNREAD"]}'
+```
 
 **REVIEW — MANDATORY: star + label every REVIEW email, no exceptions:**
-1. `gmail_add_label(id, "AdzeKit/Review")` — tag it
-2. `gmail_star(id)` — star it for visibility
-3. `gmail_archive(id)` — remove from inbox
+Combine into one modify call per message:
+```bash
+curl -s -X POST "$BASE/messages/{id}/modify" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"addLabelIds":["STARRED","REVIEW_LABEL_ID"],"removeLabelIds":["INBOX"]}'
+```
 
-All three calls are REQUIRED for every REVIEW email. Do NOT skip starring or labeling.
-API fallback: `POST /messages/{id}/modify` with `addLabelIds: ["STARRED", "<AdzeKit/Review label ID>"]` and `removeLabelIds: ["INBOX"]`
-No draft — label + star are the signals.
-
-**STALE** (past event/deadline, nothing actionable remaining):
-- MCP: `gmail_archive_batch([list of IDs])` — archive silently, no label, no draft
-- Note in the report under a "Stale / Past Events" section so the user can spot anything missed
+**STALE** — archive silently, no label, no draft:
+```bash
+# Batch with JUNK/NOTIFICATION/CHATTER
+```
 
 **DIRECT:**
-- MCP: `gmail_add_label(id, "AdzeKit/ActionRequired")` then `gmail_archive(id)`
-- Draft a reply **only if** the email contains a clear, specific question or explicit request. Skip the draft for: status updates framed as questions, informational emails with a courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
-- MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
-- API: POST `/messages/{id}/modify` to add label; POST `/messages/{id}` to archive
-**URGENT:**
-- MCP: `gmail_add_label(id, "AdzeKit/Urgent")` — stays in inbox, do NOT archive
-- MCP: `gmail_draft_reply(id, <draft stub>)` — reply to sender only, never reply-all
-- API: POST `/messages/{id}/modify` to add label only
+- Add ActionRequired label + archive: `{"addLabelIds":["LABEL_ID_ActionRequired"],"removeLabelIds":["INBOX"]}`
+- Draft a reply **only if** the email contains a clear, specific ask. Skip for status updates,
+  courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
 
-Draft reply stub format (reply to sender only — never CC or include other thread recipients):
+**URGENT:**
+- Add Urgent label, do NOT archive: `{"addLabelIds":["LABEL_ID_Urgent"]}`
+- Draft a reply.
+
+**Draft reply creation** — build RFC 2822 message in Python:
+```python
+import base64, email.message
+msg = email.message.EmailMessage()
+msg["To"] = original_sender  # reply to sender only, never reply-all
+msg["Subject"] = f"Re: {original_subject}"
+msg["In-Reply-To"] = original_message_id_header
+msg["References"] = original_message_id_header
+msg.set_content(body_text)
+raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+# POST to $BASE/drafts with {"message": {"raw": raw, "threadId": thread_id}}
+```
+
+Draft reply stub format:
 ```
 Hi [Name],
 
@@ -138,8 +195,7 @@ Thanks,
 
 ### Step 5 — Write triage report
 
-Call `backbone_write_draft(filename, content)` with filename `inbox-zero-YYYY-MM-DD-HHMM.md`
-(use today's date and current time in 24h format, e.g. `inbox-zero-2026-03-02-0914.md`).
+Use the `Write` tool to create `{SHED}/drafts/inbox-zero-YYYY-MM-DD-HHMM.md`.
 
 **Report format:**
 
@@ -195,17 +251,15 @@ Actions: N processed · N archived · N labeled Urgent · N labeled ActionRequir
 Run: YYYY-MM-DD HH:MM
 ```
 
-Loop lines in Urgent and Direct sections are copy-paste ready for `loops/open.md`.
-
 ### Step 6 — Update email patterns memory
 
-Call `backbone_update_email_patterns(...)` with any NEW patterns learned from this run:
-- `new_junk_senders`: senders confirmed as junk this run (not already in memory)
-- `new_notification_sources`: automated senders newly identified
-- `new_customer_domains`: external domains matched to customer projects
-- `notes`: any learned classification rules worth remembering (e.g. recurring threads)
+Use the `Edit` tool to append new patterns to `{SHED}/drafts/email-patterns.md`:
+- Add new junk senders under `## Known Junk Senders`
+- Add new notification sources under `## Known Notification Sources`
+- Add new customer domains under `## Customer Domains`
+- Add dated notes under `## Notes`
 
-Only add entries that aren't already in the memory file. Don't re-add known senders.
+Only add entries that aren't already in the file. Update the `Last updated:` line to today.
 
 ---
 
@@ -230,26 +284,19 @@ Inbox Zero complete — YYYY-MM-DD HH:MM
 Report: drafts/inbox-zero-YYYY-MM-DD-HHMM.md
 ```
 
-Then print the action queue as **loop-ready lines** that can be copied directly into `loops/open.md`.
+Then print the action queue as **loop-ready lines** for `loops/active.md`.
 
-**Generate one loop line for EVERY URGENT and DIRECT email** — no exceptions. Each email that
-stays labeled (Urgent or ActionRequired) gets exactly one line.
-
-Use the AdzeKit backbone loop format:
+**Generate one loop line for EVERY URGENT and DIRECT email** — no exceptions.
 ```
 - [ ] (SIZE) [YYYY-MM-DD] Verb + description, embed #customer-slug in text
 ```
 
 Rules:
-- Date = today (the date the triage ran), NOT the email's send date
-- Customer/project slug is embedded as a `#hashtag` in the description text
+- Date = today (triage date), NOT email send date
+- Customer/project slug embedded as `#hashtag` in description
 - No trailing punctuation, no extra metadata
 
-Sizing guide:
-- `(XS)` — single reply or quick decision, < 5 min
-- `(S)` — short task, one interaction, < 30 min
-- `(M)` — requires preparation or multiple steps, < 2 hours
-- `(L)` — significant effort, review, or multi-day work
+Sizing: `(XS)` < 5min, `(S)` < 30min, `(M)` < 2hr, `(L)` significant effort.
 
 ---
 
@@ -261,15 +308,8 @@ Sizing guide:
 - NEVER reply-all — drafts go to the original sender only, no CC recipients
 - NEVER draft a reply to a calendar invite — classify as NOTIFICATION and archive
 - NEVER draft a reply unless there is a clear, specific ask requiring a personal response
-- Proposed loops go in the triage report and terminal output only — human copies them to loops/open.md
-- If unsure about a classification, prefer DIRECT over CHATTER (false positive is safer)
+- Proposed loops go in the triage report and terminal output only — human copies them
+- If unsure about classification, prefer DIRECT over CHATTER (false positive is safer)
 - If unsure about urgency, prefer URGENT over DIRECT for external emails
-
----
-
-## MCP Configuration
-
-Both `adzekit-mcp-backbone` and `adzekit-mcp-gmail` MCP servers must be running and configured
-in `.claude/settings.json` with `ADZEKIT_SHED` pointing to your workspace directory.
 
 ARGUMENTS: $ARGUMENTS

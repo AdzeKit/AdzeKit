@@ -6,9 +6,21 @@ Output is a concise (< 2 page) digest to `drafts/`. Read-only — never posts or
 
 ## Prerequisites
 
-MCP servers must be running:
-- `adzekit-mcp-backbone` — backbone read + drafts write
-- Slack MCP — Slack read access
+- Slack MCP (`mcp__slack__slack_read_api_call`) — Slack read access
+
+---
+
+## Shed Access
+
+All backbone reads use the `Read` tool directly on shed files. Writes use `Write` to `{SHED}/drafts/`.
+
+| Data | Path |
+|------|------|
+| Role context | `{SHED}/knowledge/role-context.md` |
+| Knowledge files | `{SHED}/knowledge/*.md` (Glob, then Read) |
+| Today's note | `{SHED}/daily/YYYY-MM-DD.md` |
+| Active loops | `{SHED}/loops/active.md` |
+| Draft output | `{SHED}/drafts/slack-digest-YYYY-MM-DD-HHMM.md` (Write tool) |
 
 ---
 
@@ -16,10 +28,10 @@ MCP servers must be running:
 
 ### Step 1 — Load interests
 
-Call in parallel:
-- `backbone_search("", ["knowledge"])` — discover all knowledge files, extract tags and topics
-- `backbone_get_today_context()` — today's loops/meetings for the header line
-- Read `knowledge/role-context.md` directly — priority channels list, technical interests
+Read all in parallel:
+- `{SHED}/knowledge/role-context.md` — priority channels list, technical interests
+- Glob `{SHED}/knowledge/*.md` — discover all knowledge files, extract tags and topics
+- `{SHED}/daily/{today}.md` + `{SHED}/loops/active.md` — today's context for the header line
 
 Build an interest profile:
 ```
@@ -30,6 +42,8 @@ SEARCH KEYWORDS: <derived from technical interests, batched for OR queries>
 ```
 
 ### Step 2 — Fetch Slack (two tiers)
+
+Use `mcp__slack__slack_read_api_call` for all API calls. All calls are read-only.
 
 **Tier 1 — Priority channels (detailed):**
 
@@ -64,7 +78,7 @@ One-line summaries only, grouped by section.
 
 ### Step 4 — Write digest
 
-Call `backbone_write_draft("slack-digest-YYYY-MM-DD-HHMM.md", content)`.
+Use the `Write` tool to create `{SHED}/drafts/slack-digest-YYYY-MM-DD-HHMM.md`.
 
 **Target: < 2 pages.** Be ruthlessly concise.
 
@@ -73,7 +87,7 @@ Call `backbone_write_draft("slack-digest-YYYY-MM-DD-HHMM.md", content)`.
 Print the digest directly. Print suggested loops for items needing follow-up:
 
 ```
-Suggested loops (copy to loops/open.md):
+Suggested loops (copy to loops/active.md):
 
 - [ ] (S) [YYYY-MM-DD] Reply to @sender in #channel re: topic
 ```

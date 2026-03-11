@@ -281,6 +281,26 @@
         40% { opacity: 1; transform: scale(1); }
     }
 
+    .isaac-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+
+    .isaac-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--border);
+    }
+
+    .isaac-dot.ok    { background: var(--green); }
+    .isaac-dot.error { background: var(--red); }
+
     @media (max-width: 768px) {
         main { flex-direction: column; }
         .sessions-sidebar { width: 100%; min-width: unset; max-height: 180px; border-right: none; border-bottom: 1px solid var(--border); }
@@ -305,14 +325,15 @@
 <div class="chat-pane">
     <div class="chat-pane-header">
         <span class="chat-pane-title" id="chat-title">// agent</span>
+        <span class="isaac-status" id="isaac-status">
+            <span class="isaac-dot" id="isaac-dot"></span>
+            <span id="isaac-label">checking...</span>
+        </span>
     </div>
 
     <div class="quick-actions">
-        <button class="quick-action" onclick="sendQuick('Triage my inbox. Show me what needs attention.')">Triage inbox</button>
-        <button class="quick-action" onclick="sendQuick('Show me all my open loops and flag anything overdue.')">Check loops</button>
-        <button class="quick-action" onclick="sendQuick('Draft replies for any emails that need a response today.')">Draft replies</button>
-        <button class="quick-action" onclick="sendQuick('Archive all newsletter and notification emails in my inbox.')">Clean inbox</button>
-        <button class="quick-action" onclick="sendQuick('Give me a full status report: projects, loops, and inbox count.')">Status report</button>
+        <button class="quick-action" onclick="sendQuick('Show me all my active loops and flag anything overdue.')">Check loops</button>
+        <button class="quick-action" onclick="sendQuick('Give me a full status report: projects, loops, and bench items.')">Status report</button>
     </div>
 
     <div class="chat-messages" id="chat-messages">
@@ -570,9 +591,27 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ---- Isaac status ---------------------------------------------------------
+
+async function checkIsaac() {
+    const dot = document.getElementById('isaac-dot');
+    const label = document.getElementById('isaac-label');
+    try {
+        const res = await fetch('/api/agent/status');
+        const data = await res.json();
+        const ok = data.isaac?.available;
+        dot.className = 'isaac-dot ' + (ok ? 'ok' : 'error');
+        label.textContent = ok ? 'isaac' : 'isaac unavailable';
+    } catch (_) {
+        dot.className = 'isaac-dot error';
+        label.textContent = 'status unknown';
+    }
+}
+
 // ---- Init -----------------------------------------------------------------
 
 async function init() {
+    checkIsaac();
     await loadSessionList();
 
     // Restore last active session

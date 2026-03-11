@@ -33,9 +33,9 @@ def bare_repo(tmp_path):
     _git(src, "config", "user.email", "test@test.com")
     _git(src, "config", "user.name", "Test")
 
-    (src / "inbox.md").write_text("# Inbox\n", encoding="utf-8")
+    (src / "bench.md").write_text("# Bench\n", encoding="utf-8")
     (src / "loops").mkdir()
-    (src / "loops" / "open.md").write_text("# Open Loops\n\n", encoding="utf-8")
+    (src / "loops" / "active.md").write_text("# Active Loops\n\n", encoding="utf-8")
 
     _git(src, "add", "-A")
     _git(src, "commit", "-m", "init")
@@ -67,25 +67,25 @@ def test_not_git_backed():
 def test_sync_clones_repo(git_settings):
     git_settings.sync_shed()
     assert (git_settings.shed / ".git").is_dir()
-    assert (git_settings.shed / "inbox.md").exists()
-    assert (git_settings.shed / "loops" / "open.md").exists()
+    assert (git_settings.shed / "bench.md").exists()
+    assert (git_settings.shed / "loops" / "active.md").exists()
 
 
 def test_sync_pulls_existing(git_settings, bare_repo, tmp_path):
     git_settings.sync_shed()
-    assert "Inbox" in git_settings.inbox_path.read_text()
+    assert "Bench" in git_settings.bench_path.read_text()
 
     other = tmp_path / "other"
     _git(tmp_path, "clone", "--branch", "main", str(bare_repo), str(other))
     _git(other, "config", "user.email", "test@test.com")
     _git(other, "config", "user.name", "Test")
-    (other / "inbox.md").write_text("# Inbox\n\n- new item\n", encoding="utf-8")
+    (other / "bench.md").write_text("# Bench\n\n- new item\n", encoding="utf-8")
     _git(other, "add", "-A")
     _git(other, "commit", "-m", "add item")
     _git(other, "push", "origin", "main")
 
     git_settings.sync_shed()
-    assert "new item" in git_settings.inbox_path.read_text()
+    assert "new item" in git_settings.bench_path.read_text()
 
 
 def test_commit_shed(git_settings):
@@ -96,8 +96,8 @@ def test_commit_shed(git_settings):
 
     assert git_settings.commit_shed("nothing") is False
 
-    (git_settings.shed / "inbox.md").write_text(
-        "# Inbox\n\n- [2026-02-16] test entry\n", encoding="utf-8"
+    (git_settings.shed / "bench.md").write_text(
+        "# Bench\n\n- [2026-02-16] test entry\n", encoding="utf-8"
     )
     assert git_settings.commit_shed("add entry") is True
 
@@ -106,16 +106,16 @@ def test_commit_shed(git_settings):
         git_settings.shed.parent,
         "clone", "--branch", "main", str(git_settings.git_repo), str(verify),
     )
-    assert "test entry" in (verify / "inbox.md").read_text()
+    assert "test entry" in (verify / "bench.md").read_text()
 
 
 def test_shed_git_status(git_settings):
     git_settings.sync_shed()
     assert git_settings.shed_git_status() == ""
 
-    (git_settings.shed / "inbox.md").write_text("dirty", encoding="utf-8")
+    (git_settings.shed / "bench.md").write_text("dirty", encoding="utf-8")
     status = git_settings.shed_git_status()
-    assert "inbox.md" in status
+    assert "bench.md" in status
 
 
 def test_sync_without_git_repo_raises():

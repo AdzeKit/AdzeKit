@@ -49,6 +49,12 @@ async def agent_page(request: Request):
     return templates.TemplateResponse(request, "agent.html", {"active_page": "agent"})
 
 
+@app.get("/guide", response_class=HTMLResponse)
+async def guide_page(request: Request):
+    """Philosophy and backbone guide."""
+    return templates.TemplateResponse(request, "guide.html", {"active_page": "guide"})
+
+
 # -- API endpoints -----------------------------------------------------------
 
 
@@ -67,7 +73,7 @@ async def api_status():
         "max_active_projects": wip["max_active_projects"],
         "daily_tasks": wip["daily_tasks"],
         "max_daily_tasks": wip["max_daily_tasks"],
-        "open_loops": loops["open"],
+        "open_loops": loops["active"],
         "overdue_loops": loops["overdue"],
         "approaching_sla": loops["approaching_sla"],
     }
@@ -75,11 +81,11 @@ async def api_status():
 
 @app.get("/api/loops")
 async def api_loops():
-    """Open loops."""
-    from adzekit.preprocessor import load_open_loops
+    """Active loops."""
+    from adzekit.preprocessor import load_active_loops
 
     settings = _settings()
-    loops = load_open_loops(settings)
+    loops = load_active_loops(settings)
     return [
         {
             "title": l.title,
@@ -131,28 +137,22 @@ async def api_today():
     }
 
 
-@app.get("/api/inbox")
-async def api_inbox():
-    """Shed inbox contents."""
+@app.get("/api/bench")
+async def api_bench():
+    """Shed bench contents (triage queue)."""
     settings = _settings()
-    if not settings.inbox_path.exists():
+    if not settings.bench_path.exists():
         return {"content": ""}
-    content = settings.inbox_path.read_text(encoding="utf-8")
+    content = settings.bench_path.read_text(encoding="utf-8")
     return {"content": content}
 
 
-@app.get("/api/mcp/status")
-async def api_mcp_status():
-    """Check availability of Claude Code / Isaac and configured MCP servers."""
-    from adzekit.agent.isaac_client import check_claude, check_isaac, check_mcp_servers
+@app.get("/api/agent/status")
+async def api_agent_status():
+    """Check availability of Isaac."""
+    from adzekit.agent.isaac_client import check_isaac
 
-    settings = _settings()
-    return {
-        "active_backend": settings.agent_backend,
-        "claude": check_claude(),
-        "isaac": check_isaac(),
-        "mcp_servers": check_mcp_servers(),
-    }
+    return {"isaac": check_isaac()}
 
 
 def _sessions_dir() -> Path:
@@ -251,6 +251,7 @@ async def api_tags():
         settings.daily_dir,
         settings.loops_dir,
         settings.projects_dir,
+        settings.knowledge_dir,
         settings.reviews_dir,
     ]
     for d in dirs_to_scan:
@@ -268,57 +269,33 @@ async def api_tags():
 
 @app.post("/api/agent/chat")
 async def api_agent_chat(request: Request):
-    """Send a message to the agent and get a response.
-
-    Uses Claude Code (isaac) via --print for non-interactive execution.
-    The configured MCP servers (adzekit-backbone, adzekit-gmail) give the
-    agent full access to the backbone and Gmail tools.
-    Falls back to the local orchestrator if claude is not available.
-    """
+    """Send a message to the agent via Isaac and get a response."""
     body = await request.json()
     user_message = body.get("message", "")
     if not user_message:
         return JSONResponse({"error": "No message provided"}, status_code=400)
     history = body.get("history", [])  # [{role, content}, ...] last N turns
 
+    from adzekit.agent.isaac_client import AgentNotAvailableError, run_agent as _run_agent
+
     settings = _settings()
-    backend = settings.agent_backend  # "isaac" | "claude" | "local"
 
-    if backend in ("isaac", "claude"):
-        from adzekit.agent.isaac_client import AgentNotAvailableError, run_agent as _run_agent
-
-        # Prefix prompt with recent conversation context so Isaac has memory
-        prompt = user_message
-        if history:
-            ctx_lines = ["[Previous conversation — continue naturally]\n"]
-            for m in history[-10:]:  # last 10 messages
-                role = "User" if m["role"] == "user" else "Assistant"
-                ctx_lines.append(f"{role}: {m['content']}")
-            ctx_lines.append(f"\n[New message]\nUser: {user_message}")
-            prompt = "\n".join(ctx_lines)
-
-        try:
-            response, used_backend = await _run_agent(
-                prompt, backend=backend, timeout=settings.agent_timeout
-            )
-            return {"response": response, "tool_calls_made": 0, "backend": used_backend}
-        except AgentNotAvailableError as exc:
-            return JSONResponse({"error": f"Backend unavailable: {exc}"}, status_code=503)
-        except Exception as exc:
-            return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
-
-    # "local" — direct Anthropic API + local tool registry (no MCP)
-    import adzekit.agent.gmail_tools  # noqa: F401
-    import adzekit.agent.shed_tools  # noqa: F401
-    from adzekit.agent.orchestrator import run_agent as _run_local
+    prompt = user_message
+    if history:
+        ctx_lines = ["[Previous conversation -- continue naturally]\n"]
+        for m in history[-10:]:
+            role = "User" if m["role"] == "user" else "Assistant"
+            ctx_lines.append(f"{role}: {m['content']}")
+        ctx_lines.append(f"\n[New message]\nUser: {user_message}")
+        prompt = "\n".join(ctx_lines)
 
     try:
-        result = _run_local(user_message)
-        return {
-            "response": result.response,
-            "tool_calls_made": result.tool_calls_made,
-            "backend": "local",
-        }
+        response, used_backend = await _run_agent(
+            prompt, timeout=settings.agent_timeout
+        )
+        return {"response": response, "tool_calls_made": 0, "backend": used_backend}
+    except AgentNotAvailableError as exc:
+        return JSONResponse({"error": f"Isaac unavailable: {exc}"}, status_code=503)
     except Exception as exc:
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
@@ -329,8 +306,9 @@ EDITOR_SECTIONS = {
     "daily": "Daily Notes",
     "loops": "Loops",
     "projects": "Projects",
+    "knowledge": "Knowledge",
     "reviews": "Reviews",
-    "inbox": "Inbox",
+    "bench": "Bench",
 }
 
 
@@ -361,6 +339,15 @@ async def projects_page(request: Request):
     )
 
 
+@app.get("/knowledge", response_class=HTMLResponse)
+async def knowledge_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "editor.html",
+        {"active_page": "knowledge", "section": "knowledge", "section_title": "Knowledge"},
+    )
+
+
 @app.get("/reviews", response_class=HTMLResponse)
 async def reviews_page(request: Request):
     return templates.TemplateResponse(
@@ -370,12 +357,12 @@ async def reviews_page(request: Request):
     )
 
 
-@app.get("/inbox", response_class=HTMLResponse)
-async def inbox_page(request: Request):
+@app.get("/bench", response_class=HTMLResponse)
+async def bench_page(request: Request):
     return templates.TemplateResponse(
         request,
         "editor.html",
-        {"active_page": "inbox", "section": "inbox", "section_title": "Inbox"},
+        {"active_page": "bench", "section": "bench", "section_title": "Bench"},
     )
 
 
@@ -394,14 +381,15 @@ def _resolve_file(section: str, name: str, settings: Settings) -> Path:
         "daily": settings.daily_dir,
         "loops": settings.loops_dir,
         "projects": settings.projects_dir,
+        "knowledge": settings.knowledge_dir,
         "reviews": settings.reviews_dir,
-        "inbox": settings.shed,
+        "bench": settings.shed,
     }[section]
 
-    if section == "inbox":
-        if name != "inbox.md":
-            raise HTTPException(status_code=400, detail="Invalid inbox path")
-        return settings.inbox_path
+    if section == "bench":
+        if name != "bench.md":
+            raise HTTPException(status_code=400, detail="Invalid bench path")
+        return settings.bench_path
 
     base_resolved = base.resolve()
     resolved = (base / name).resolve()
@@ -429,19 +417,21 @@ async def api_list_files(section: str):
 
     if section == "loops":
         result = []
-        if settings.loops_open.exists():
-            result.append({"path": "open.md", "label": "Open Loops", "group": "Active"})
-        closed_dir = settings.loops_dir / "closed"
-        if closed_dir.exists():
-            for f in sorted(closed_dir.glob("*.md"), reverse=True):
+        if settings.loops_active.exists():
+            result.append({"path": "active.md", "label": "Active Loops", "group": "Active"})
+        if settings.loops_backlog.exists():
+            result.append({"path": "backlog.md", "label": "Backlog Loops", "group": "Backlog"})
+        archive_flat = settings.loops_dir / "archive.md"
+        if archive_flat.exists():
+            result.append({"path": "archive.md", "label": "Archive (all)", "group": "Archive"})
+        archive_dir = settings.loops_archive_dir
+        if archive_dir.exists():
+            for f in sorted(archive_dir.glob("*.md"), reverse=True):
                 result.append({
-                    "path": f"closed/{f.name}",
+                    "path": f"archive/{f.name}",
                     "label": f.stem,
-                    "group": "Closed",
+                    "group": "Archive",
                 })
-        closed_flat = settings.loops_dir / "closed.md"
-        if closed_flat.exists():
-            result.append({"path": "closed.md", "label": "Closed (all)", "group": "Closed"})
         return result
 
     if section == "projects":
@@ -462,6 +452,13 @@ async def api_list_files(section: str):
                 })
         return result
 
+    if section == "knowledge":
+        files = sorted(settings.knowledge_dir.glob("*.md"))
+        return [
+            {"path": f.name, "label": f.stem, "group": None}
+            for f in files
+        ]
+
     if section == "reviews":
         files = sorted(settings.reviews_dir.glob("*.md"), reverse=True)
         return [
@@ -469,9 +466,9 @@ async def api_list_files(section: str):
             for f in files
         ]
 
-    if section == "inbox":
-        if settings.inbox_path.exists():
-            return [{"path": "inbox.md", "label": "Inbox", "group": None}]
+    if section == "bench":
+        if settings.bench_path.exists():
+            return [{"path": "bench.md", "label": "Bench", "group": None}]
         return []
 
     return []
@@ -532,6 +529,31 @@ async def api_create_this_week():
     settings = _settings()
     settings.require_initialized()
     path = create_review(settings=settings)
+    return {"name": path.name, "status": "created"}
+
+
+@app.post("/api/files/knowledge/create")
+async def api_create_knowledge(request: Request):
+    """Create a new knowledge file."""
+    settings = _settings()
+    settings.require_initialized()
+
+    body = await request.json()
+    slug = body.get("slug", "").strip()
+    if not slug:
+        raise HTTPException(status_code=400, detail="Slug is required")
+    if not re.match(r"^[a-z0-9][a-z0-9\-]*$", slug):
+        raise HTTPException(
+            status_code=400,
+            detail="Slug must be lowercase alphanumeric with hyphens (e.g. my-topic)",
+        )
+
+    path = settings.knowledge_dir / f"{slug}.md"
+    if path.exists():
+        raise HTTPException(status_code=409, detail=f"Knowledge file already exists: {slug}.md")
+
+    settings.knowledge_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"# {slug.replace('-', ' ').title()}\n\n", encoding="utf-8")
     return {"name": path.name, "status": "created"}
 
 
