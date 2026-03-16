@@ -1,7 +1,7 @@
 # Weekly Review Skill
 
-Generate a weekly review draft and a copy-pasteable pulse summary from this week's daily logs,
-active projects, and active loops. Writes to `drafts/weekly-review-YYYY-WNN.md`.
+Generate a weekly review from active loops, active projects, and daily logs.
+Writes to `drafts/weekly-review-YYYY-WNN.md`.
 
 Never writes to backbone directories (loops/, projects/, daily/, reviews/).
 
@@ -15,8 +15,7 @@ All reads use the `Read` tool directly on shed files. Writes use `Write` to `{SH
 |------|------|
 | Daily notes | `{SHED}/daily/YYYY-MM-DD.md` (for each day Mon-Sun) |
 | Active loops | `{SHED}/loops/active.md` |
-| Projects | `{SHED}/projects/*.md` (Glob, then Read each) |
-| Review stub | `{SHED}/reviews/YYYY-WNN.md` |
+| Projects | `{SHED}/projects/*.md` (Glob, then Read each — skip archive/ and backlog/) |
 | Draft output | `{SHED}/drafts/weekly-review-YYYY-WNN.md` (Write tool) |
 
 ---
@@ -29,118 +28,70 @@ Compute the ISO week to review. Default: the **current ISO week** (Mon-Sun conta
 Accept an optional argument `$ARGUMENTS` — if provided, interpret as an ISO week string
 (e.g. `2026-W09`) or a YYYY-MM-DD date within the target week.
 
+Determine the date of the Sunday ending the week for the header.
+
 ### Step 2 — Load backbone context (all in parallel)
 
 Read directly:
 - Daily notes: `{SHED}/daily/YYYY-MM-DD.md` for each day Mon-Sun of the target week
 - Active loops: `{SHED}/loops/active.md`
-- Projects: Glob `{SHED}/projects/*.md`, then Read each
-- Review stub: `{SHED}/reviews/YYYY-WNN.md` (if it exists)
+- Projects: Glob `{SHED}/projects/*.md` (skip archive/ and backlog/), then Read each
 
-### Step 3 — Read active project files for weekly activity
+### Step 3 — Synthesize the review
 
-For each active project, read the full project markdown file. Look for **Log entries** dated
-within Mon-Sun of the target week. These confirm project work that may not appear in daily notes.
+For each section below, extract the relevant information from daily notes, project logs, and loops.
 
-### Step 4 — Synthesize the review
+**Active Loops:** List every loop from `loops/active.md`. For each, note whether it was acted on this week (check daily notes and project logs). Flag overdue loops. The review is a prompt to act, schedule, or close each one.
 
-Build a structured summary by extracting:
+**Active Projects:** For each project file (not archive/backlog), check for log entries dated within this week. Classify as:
+- **Moved** — has log entries or daily note mentions this week
+- **Stale (>7 days)** — last log entry is older than 7 days
 
-**Completed work (for pulse bullets):**
-- Intentions marked `[x]` in daily notes
-- Significant log entries from daily notes
-- Project log entries dated this week
+The review is a prompt to kill, defer, or commit to stale projects.
 
-**Proud-of candidates:** Customer wins, shipped work, difficult problems solved, meaningful progress.
+**Decisions & Reflection:** Leave these as prompts for the human to fill in. Pre-populate with observations from the week (e.g., patterns in daily reflections, repeated themes).
 
-**Blockers/challenges:** `blocked:` sections in daily notes, overdue loops, project friction.
-
-**Next-week focus:** Active loops (especially M/L/XL), upcoming milestones, carried intentions.
-
-**Project pulse:** For each active project, note if it moved this week or is stale.
-
-### Step 5 — Write the review draft
+### Step 4 — Write the review draft
 
 Use the `Write` tool to create `{SHED}/drafts/weekly-review-YYYY-WNN.md`:
 
 ```markdown
-# Weekly Review — YYYY-WNN
-_(Mon YYYY-MM-DD → Sun YYYY-MM-DD)_
-
----
-
-## Pulse Summary
-> Copy-paste this section for standups, Slack, or manager check-ins.
-
-**What I got done this week that I'm proud of:**
-- [bullet 1 — specific win or shipped work]
-- [bullet 2]
-
-**Top focus for next week:**
-- [bullet 1 — most important commitment]
-- [bullet 2]
-
-**Blockers or challenges:**
-- [bullet — or "Nothing critical to flag this week"]
-
----
-
-## Day-by-Day Log
-
-### Monday YYYY-MM-DD
-**Planned:** [intentions from daily note, or "(no note)"]
-**Completed:** [done intentions]
-**Log:** [key log entries]
-
-[repeat for each weekday]
-
----
-
-## Active Projects
-
-| Project | Progress | Moved this week? | Notes |
-|---------|----------|------------------|-------|
-| [slug]  | [X%]     | Yes / No         | [brief] |
-
----
+# YYYY Week NN Review (YYYY-MM-DD)
 
 ## Active Loops
+> Review all loops in `loops/active.md`
+> For each: act on it, schedule it, or close it
 
-**Due this week / overdue:**
-- [loop lines]
+[List each loop with status: acted on / overdue / upcoming]
 
-**Coming up next week:**
-- [loops with due dates next week]
+## Active Projects
+> Check progress on each project in `projects/`
+> Any project stale for >7 days? Kill, defer, or commit.
 
-**All active loops:** N total
-
----
+| Project | Last Activity | Status | This Week |
+|---------|--------------|--------|-----------|
+| [slug] | YYYY-MM-DD | Moved / Stale | [brief summary of what happened or "no activity"] |
 
 ## Decisions
+- What am I saying no to this week?
+- What trade-offs am I not admitting to myself?
 
-- What am I saying no to next week?
-- Any trade-offs I'm not admitting to myself?
-
----
+[Pre-populate with observations from daily reflections if available]
 
 ## Reflection
+- What drained me this week?
+- What energized me?
+- What will I stop doing next week?
 
-- **What drained me this week?**
-- **What energized me?**
-- **What will I stop doing next week?**
-
----
-Generated: YYYY-MM-DD HH:MM
+[Pre-populate with observations from daily reflections if available]
 ```
 
-### Step 6 — Print terminal summary
+### Step 5 — Print terminal summary
+
+Print the review directly to terminal, then note the draft location:
 
 ```
-Weekly Review complete — YYYY-WNN
-  Daily notes: N/7 days found
-  Projects:    N active, N backlog
-  Active loops:  N
-  Draft:       drafts/weekly-review-YYYY-WNN.md
+Draft saved: drafts/weekly-review-YYYY-WNN.md
 ```
 
 ---
