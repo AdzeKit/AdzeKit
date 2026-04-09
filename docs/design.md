@@ -111,6 +111,24 @@ The `drafts/` directory is the agent's output area. When the agent wants to prop
 
 Drafts are git-ignored and ephemeral. They are not part of the backbone spec.
 
+### Batch Patch Pattern
+
+When a skill produces multiple related proposals (e.g. knowledge updates from Slack, inbox triage actions), writing one draft per proposal overwhelms the bench. The **batch patch pattern** consolidates all proposals into a single patch file that serves as the review surface:
+
+1. **Patch file** (`drafts/<skill>-patch-YYYY-MM-DD.md`) -- lists every proposed change with a summary and a pre-generated `cp` command to apply it. The human reads one file, makes batch decisions.
+2. **Per-file drafts** (`drafts/<skill>/<slug>.md`) -- complete, ready-to-promote files containing existing content merged with proposed additions. Promotion is a single `cp` command, not a copy-paste-edit cycle.
+3. **Watermark file** (`drafts/<skill>-watermark.md`) -- tracks the latest processed timestamp per source (channel, mailbox, etc.) to prevent reprocessing on subsequent runs.
+
+The patch file replaces the bench as the primary decision surface for batch skills. The bench still records that a patch exists for triage, but the patch itself is where the human works.
+
+Skills that use this pattern: `slack-knowledge`. Future candidates: `inbox-zero` (for batching email actions), `loop-momentum` (for batching sweep proposals).
+
+### Watermarks
+
+Skills that process external sources (Slack, Gmail, calendar) need idempotency. A watermark file in `drafts/` records the most recent item processed per source. On the next run, the skill reads the watermark and only fetches items newer than the recorded timestamp.
+
+Watermarks live in `drafts/` (agent-writable zone). The human can reset processing by deleting the watermark file.
+
 ## Estimation
 
 AdzeKit uses t-shirt sizes -- `(S)`, `(M)`, `(L)`, `(XL)` -- appended to tasks for relative effort. No story points or hour tracking; just enough signal to eyeball whether a week is overloaded. Tasks can also carry inline deadlines as `(YYYY-MM-DD)` when tied to hard dates. Both annotations are optional. Estimation tooling will parse these markers to surface workload summaries and forecast throughput.

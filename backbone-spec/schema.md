@@ -106,6 +106,10 @@ Agent-generated proposals awaiting human review. The agent writes here when it w
 
 Drafts are **not tracked by git**. They are ephemeral by nature -- once applied or discarded, they can be deleted.
 
+Skills that produce batch proposals may create subdirectories inside `drafts/` (e.g. `drafts/knowledge/`) containing complete, ready-to-promote files. These mirror the backbone directory they target, so promotion is a single `cp` command rather than a copy-paste-edit cycle.
+
+**Watermark files** (`drafts/<skill>-watermark.md`) track the latest processed timestamp per external source (Slack channel, mailbox, etc.). They prevent reprocessing on subsequent runs. Delete a watermark to force a full rescan.
+
 ## Metadata
 
 Files carry no YAML frontmatter. All metadata is derived from the filesystem, git, and inline annotations:

@@ -11,4 +11,5 @@
 | 6: Gmail Integration | OAuth, inbox triage, draft replies, archive | Done |
 | 7: Agent Polish | Conversation memory, streaming responses, auto-schedule | Next |
 | 8: Calendar Integration | Google Calendar read/write, deep work blocks | Planned |
-| 9: Slack Integration | Message triage, status updates, loop creation | Planned |
+| 9: Slack Integration | Message triage, status updates, loop creation | In Progress |
+| 10: Knowledge Extraction | Slack-to-knowledge pipeline, batch patch review, watermarks | In Progress |
