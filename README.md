@@ -45,7 +45,12 @@ adzekit today              # Open/create today's daily note
 adzekit add-loop "Send estimate" --who Alice --what "API estimate"
 adzekit status             # Show shed health summary
 adzekit sweep              # Move completed loops to closed archive
+adzekit tags               # List all #tags in the shed
+adzekit tags vector-search # Find every file that contains a tag
+adzekit tags --completions # Regenerate Cursor autocomplete snippets
 ```
+
+Run `adzekit tags --completions` after adding new `#tags` to your notes. This scans every markdown file in the shed and writes `.vscode/adzekit.code-snippets` so Cursor offers tag autocomplete as you type.
 
 ### 4. Run tests
 

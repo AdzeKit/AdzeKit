@@ -76,3 +76,5 @@ Conceptually, AdzeKit is a Bullet Journal-compatible digital workshop for people
 **N5: Rituals as Structure.** Daily and weekly checklists keep you organized and reflective -- even as tools change. Morning and evening templates guide planning and review. The practice works without any software at all.
 
 **N6: Human Always Decides.** Critical choices -- like accepting new work or sending updates -- are always yours. AI provides drafts and suggestions, but humans make the final call.
+
+**N7: Review Must Scale with Output.** When AI produces many proposals at once (knowledge updates, email actions, loop sweeps), the review surface must compress proportionally. One patch file with batch decisions beats ten separate drafts requiring individual triage. The human's decision quality degrades when the review volume exceeds what can be scanned in a few minutes. Consolidate, summarize, and pre-generate apply commands so the human's job is "accept/reject/edit" per section, not "read, extract, reformulate, paste" per item.
