@@ -28,3 +28,6 @@ Thumbs.db
 credentials.json
 token.json
 stock/
+
+# Binary exports
+*.docx
