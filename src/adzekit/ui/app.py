@@ -10,7 +10,7 @@ Run with: adzekit serve
 import json
 import re
 import secrets
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -88,14 +88,14 @@ async def api_loops():
     loops = load_active_loops(settings)
     return [
         {
-            "title": l.title,
-            "date": l.date.isoformat(),
-            "size": l.size,
-            "due": l.due.isoformat() if l.due else None,
-            "status": l.status,
-            "who": l.who,
+            "title": loop.title,
+            "date": loop.date.isoformat(),
+            "size": loop.size,
+            "due": loop.due.isoformat() if loop.due else None,
+            "status": loop.status,
+            "who": loop.who,
         }
-        for l in loops
+        for loop in loops
     ]
 
 
@@ -276,7 +276,8 @@ async def api_agent_chat(request: Request):
         return JSONResponse({"error": "No message provided"}, status_code=400)
     history = body.get("history", [])  # [{role, content}, ...] last N turns
 
-    from adzekit.agent.isaac_client import AgentNotAvailableError, run_agent as _run_agent
+    from adzekit.agent.isaac_client import AgentNotAvailableError
+    from adzekit.agent.isaac_client import run_agent as _run_agent
 
     settings = _settings()
 

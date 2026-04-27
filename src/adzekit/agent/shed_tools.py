@@ -13,7 +13,6 @@ it writes a proposal to drafts/ for the human to review and apply.
 
 import json
 from datetime import date
-from pathlib import Path
 
 from adzekit.agent.tools import registry
 from adzekit.config import Settings, get_settings
@@ -284,4 +283,5 @@ def shed_list_drafts() -> str:
 
 def _slug(text: str) -> str:
     """Convert text to a filesystem-safe slug."""
-    return "".join(c if c.isalnum() or c == "-" else "-" for c in text.lower().strip())[:50].strip("-")
+    raw = "".join(c if c.isalnum() or c == "-" else "-" for c in text.lower().strip())
+    return raw[:50].strip("-")

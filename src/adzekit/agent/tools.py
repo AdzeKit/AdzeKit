@@ -7,7 +7,7 @@ them so the orchestrator can expose them to the LLM as callable tools.
 
 import inspect
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, get_type_hints
 
 

@@ -1,12 +1,12 @@
 # AdzeKit Backbone Specification v1
 
-A short, versioned contract. Any folder that conforms to this spec is an AdzeKit-compatible shed. The backbone is a specification, not a codebase.
+A short, versioned contract. Any folder that conforms to this spec is an AdzeKit-compatible shed.
 
 ## Shed Layout
 
 ```
 <shed-root>/
-  .adzekit                # marker + config file
+  .adzekit                    # marker + config
   daily/
     YYYY-MM-DD.md
   loops/
@@ -14,9 +14,9 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
     backlog.md
     archive.md
     archive/
-      YYYY-WNN.md
-  projects/               # .md files here are active projects
-    <slug>.md
+      YYYY-WNN.md             # weekly snapshots (optional)
+  projects/
+    <slug>.md                 # active projects live at root
     backlog/
       <slug>.md
     archive/
@@ -25,38 +25,26 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
     <slug>.md
   reviews/
     YYYY-WNN.md
-  bench.md
-  stock/                  # git-ignored, synced separately
+  skills/                     # skill definitions (human-editable)
+    <name>.md
+  stock/                      # git-ignored, synced via rclone
     <project-slug>/
-      <any file>
-  drafts/                 # git-ignored, agent-writable
+  drafts/                     # git-ignored, agent-writable
     <any file>
 ```
 
 ## Access Zones
 
-The shed has two access zones:
+| Zone | Directories | Who writes | Purpose |
+|------|-------------|-----------|---------|
+| **Backbone** | `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `skills/` | Human | Your real data |
+| **Workbench** | `drafts/`, `stock/` | Agent | Proposals and raw materials |
 
-### Backbone (human-owned, read-only for agents)
+Agents read the backbone but never write to it. All agent output goes to `drafts/`. The human reviews and applies — or discards.
 
-Everything above except `stock/` and `drafts/`. The backbone is the human's domain -- agents can read it but never write to it. All backbone changes go through the human via the CLI or editor.
-
-Backbone directories: `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `bench.md`.
-
-### Workbench (agent-writable)
-
-Two directories where the agent can freely create and modify files:
-
-- **`stock/`** -- Raw material that hasn't been shaped yet (transcripts, PDFs, exports). Synced via rclone.
-- **`drafts/`** -- Agent-generated proposals awaiting human review. When the agent wants to suggest a new loop, bench item, or any backbone change, it writes a proposal here. The human reviews and applies (or discards) the draft.
-
-Both directories are git-ignored.
-
-## Marker / Config File
+## Marker / Config
 
 **Path:** `.adzekit`
-
-Every initialized shed contains a `.adzekit` file at the root. It identifies the directory as an AdzeKit shed, declares the backbone spec version, and holds per-shed tuning parameters:
 
 ```
 backbone_version = 1
@@ -67,258 +55,110 @@ stale_loop_days = 7
 rclone_remote = gdrive:adzekit
 ```
 
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `backbone_version` | 1 | Spec version (read-only, set by `init`) |
-| `max_active_projects` | 3 | WIP cap: max projects in `projects/` root |
-| `max_daily_tasks` | 5 | Max intention items per daily note |
-| `loop_sla_hours` | 24 | Hours before a loop is flagged as approaching SLA |
-| `stale_loop_days` | 7 | Days before a loop is flagged as stale |
-| `rclone_remote` | *(empty)* | rclone base path for stock/drafts sync (e.g. `gdrive:adzekit`) |
-| `git_repo` | *(empty)* | Git remote URL for shed sync |
-| `git_branch` | `main` | Git branch for shed sync |
-
-All configuration lives in this single file. Edit values directly to tune the shed. `adzekit init` writes defaults; subsequent `init` calls preserve your edits. `adzekit setup-sync` writes the `rclone_remote` key here.
-
-**Why a marker?** Without it, any mis-configured `ADZEKIT_SHED` path would silently create a full directory tree in the wrong place. The marker is a gate: `adzekit init` writes it, and every other command checks for it before operating. If the marker is missing, the CLI prints an error and exits instead of creating files.
-
-The version number allows future spec revisions to detect and migrate older sheds. There is no migration logic today -- version 1 is the only version.
+The marker identifies a directory as a shed. Every command checks for it before operating. `adzekit init` writes it; subsequent `init` calls preserve your edits.
 
 ## File Encoding
 
-All files are UTF-8 Markdown. No proprietary formats.
-
-## Stock
-
-**Path:** `stock/<project-slug>/`
-
-Raw material that hasn't been shaped yet -- transcripts, PDFs, spreadsheets, exports, recordings. The name follows the woodworking metaphor: stock is the unworked lumber that the adze shapes into the finished piece.
-
-Stock is **not tracked by git**. These files are often large, binary, or in proprietary formats -- none of which git handles well. Instead, `stock/` syncs via rclone to a cloud remote (Google Drive, SharePoint, S3, etc.). Set `rclone_remote` in `.adzekit` (or run `adzekit setup-sync`) to configure the remote.
-
-Subdirectories inside `stock/` match project slugs so LLM adapters can find the raw material for a given project and summarize it into that project's `## Log`.
-
-## Drafts
-
-**Path:** `drafts/`
-
-Agent-generated proposals awaiting human review. The agent writes here when it wants to suggest changes to the backbone (new loops, bench items, triage summaries, etc.). The human reviews each draft and either applies it to the backbone or discards it.
-
-Drafts are **not tracked by git**. They are ephemeral by nature -- once applied or discarded, they can be deleted.
-
-Skills that produce batch proposals may create subdirectories inside `drafts/` (e.g. `drafts/knowledge/`) containing complete, ready-to-promote files. These mirror the backbone directory they target, so promotion is a single `cp` command rather than a copy-paste-edit cycle.
-
-**Watermark files** (`drafts/<skill>-watermark.md`) track the latest processed timestamp per external source (Slack channel, mailbox, etc.). They prevent reprocessing on subsequent runs. Delete a watermark to force a full rescan.
+All files are UTF-8 Markdown. No proprietary formats, no YAML frontmatter.
 
 ## Metadata
 
-Files carry no YAML frontmatter. All metadata is derived from the filesystem, git, and inline annotations:
+- **Identity:** file path
+- **Timestamps:** git history (creation, modification)
+- **Loop dates:** inline `[YYYY-MM-DD]` (survives file rewrites)
+- **Tags:** inline `#kebab-case` tokens, case-insensitive, no registry
 
-- **Identity:** The file path is the unique identifier.
-- **File timestamps:** Creation and modification dates come from git history. The `git_age` module queries these on demand for staleness tracking in projects and reviews.
-- **Loop timestamps:** Loops carry an inline `[YYYY-MM-DD]` date. The meaning of this date changes over a loop's lifecycle:
-  - In `open.md`, the date is the **creation date** -- stamped when the loop is first added.
-  - When `adzekit sweep` moves a closed loop to `closed.md`, the date is **overwritten with the closure date** (today).
-  - Git history records both transitions: `git log -p -- loops/open.md` shows when the line appeared (creation) and disappeared (sweep); `git log -p -- loops/closed.md` shows when it arrived (closure). The inline date in each file gives the same information without requiring git archaeology.
-  - This dual-use works because a loop only ever lives in one file at a time, and the relevant question differs by context: "how old is this open commitment?" vs "when did I close this?"
-- **Tags:** Use inline `#tags` anywhere in the document. A tag is any `#word` or `#hyphenated-word` token (kebab-case). Tags are **case-insensitive** -- `#Acme`, `#acme`, and `#ACME` all resolve to the same tag (`acme`). For compound words always use hyphens: `#vector-search`, not `#vectorSearch` or `#vector_search`. Place tags wherever they read naturally -- after headings, in bullets, or on their own line.
-
-### Tag conventions
-
-Tags are a flat, case-insensitive namespace. There is no tag registry, no controlled vocabulary, and no separate index file. All tags are lowercased at extraction, so writers never need to worry about casing consistency.
-
-**Why no index?** A maintained tag list rots the moment someone forgets to update it. Instead, the tag index is computed on the fly by scanning every `.md` file for `#word` tokens -- the filesystem is the source of truth. Tooling can build an in-memory `dict[str, list[Path]]` in milliseconds, even at thousands of files.
-
-**Why no namespacing?** Prefixes like `#p-alice` or `#t-machine-learning` add friction to typing and reading. In practice, tag types distinguish themselves naturally:
-
-- **People:** `#alice-chen`, `#ryan-bondaria`
-- **Topics:** `#vector-search`, `#machine-learning`
-- **Clients/orgs:** `#acme`, `#nova`, `#globex`
-- **Reference IDs:** `#AR-000109761`
-
-If programmatic classification is ever needed, the tooling layer can infer type from pattern (names vs concepts vs IDs) without burdening the writer.
-
-**Contacts are just tags.** There is no separate contacts system. Mention `#firstname-lastname` wherever a person appears -- in daily notes, loops, project logs. Querying the tag index for that tag produces a complete interaction history across the shed.
+---
 
 ## Daily Notes
 
 **Path:** `daily/YYYY-MM-DD.md`
 
-One file per calendar day. The date is the filename.
+One file per calendar day.
 
 ```markdown
-# 2026-02-16 Monday
+# 2026-04-09 Wednesday
 
-## Morning: Intention
-- [ ] Top priority:
-- [ ] Close loop:
+> Focus: finish ARC batch sizing, review knowledge patch
 
-## Log
+- [ ] (S) [2026-04-09] Get ARC an answer on batch inference costs <- due today
+- [ ] (XS) [2026-04-07] Work AI Gateway data privacy talking point <- carried
 
-## Evening: Reflection
-- **Finished:**
-- **Blocked:**
-- **Tomorrow:**
+- 09:00 Started ARC batch pricing research
+- 10:30 Call with @alice re: MLflow migration timeline
+- [x] (S) Responded to @bob on vector search sizing
+- 14:00 Deep work: Model Lens feature store integration
+
+> End: Energy 3/5. 1 done, 1 open. Tomorrow: finish ARC sizing.
 ```
+
+**Structure:**
+- `> Focus:` — blockquote bookend. 2-3 word focus from yesterday's Tomorrow or top loop.
+- Task list — proposed intentions, max 5 items.
+- Log entries — timestamped bullets, appended throughout the day via `/log` or manual editing. Completed loops inline as `- [x]`.
+- `> End:` — blockquote bookend. Energy score, done/open count, tomorrow items.
+
+The bookends replace formal sections. They're faster to write and scan.
 
 ## Loops
 
-A loop is any commitment to another person that requires closure. Loops use the same active/backlog/archive lifecycle as projects.
+A loop is any commitment that would nag at you if you didn't write it down — especially promises to other people.
 
 **Paths:**
-- `loops/active.md` -- loops you are actively working on
-- `loops/backlog.md` -- future commitments not currently top of mind
-- `loops/archive.md` -- completed loops (flat log)
-- `loops/archive/YYYY-WNN.md` -- weekly archive snapshots (optional)
+- `loops/active.md` — top-of-mind commitments
+- `loops/backlog.md` — future commitments
+- `loops/archive.md` — completed loops (flat log)
 
-Loops use a flat checklist format with an inline created date in square brackets:
-
+**Format:**
 ```markdown
 - [ ] (SIZE) [YYYY-MM-DD] Loop title (DUE-DATE)
 ```
 
-- `(SIZE)` -- optional t-shirt size (`XS`, `S`, `M`, `L`, `XL`)
-- `[YYYY-MM-DD]` -- the date the loop was created
-- `(YYYY-MM-DD)` at end -- optional due date / deadline
+- `(SIZE)` — optional: `XS`, `S`, `M`, `L`, `XL`
+- `[YYYY-MM-DD]` — creation date (in active), closure date (in archive)
+- `(YYYY-MM-DD)` at end — optional due date
 
-Example:
+**Closing loops:** Mark `[x]` in active.md, run `adzekit sweep`. Sweep removes checked lines, overwrites the inline date with today, appends to archive.md.
 
-```markdown
-# Active Loops
-
-- [ ] (XS) [2026-02-17] Follow up with Alice on API estimate
-- [ ] (M) [2026-02-18] Start column mapping work with Jas (2026-03-01)
-- [ ] (S) [2026-02-19] Get Acme docs for gateway diagnosis
-```
-
-Backlog loops follow the same format but live in `backlog.md`:
-
-```markdown
-# Backlog Loops
-
-- [ ] (M) [2026-02-20] Research new API framework options (2026-06-01)
-- [ ] (S) [2026-02-21] Plan team offsite logistics
-```
-
-Move loops between `active.md` and `backlog.md` by cutting and pasting lines. When a backlog loop becomes urgent, promote it to active. When an active loop can wait, demote it to backlog.
-
-### Closing loops
-
-Mark a loop done by flipping `[ ]` to `[x]` in `active.md`, then run `adzekit sweep`. Sweep:
-
-1. Removes all `[x]` lines from `active.md`.
-2. Overwrites each loop's inline `[YYYY-MM-DD]` with today's date (the **closure date**).
-3. Appends them to `archive.md`.
-
-```markdown
-- [x] (L) [2026-02-23] Gartner DSML Survey (2026-02-18)
-```
-
-The original creation date is not lost -- it is preserved in git history as the commit that first added the line to `active.md`. The inline date shifts meaning from "when was this opened?" to "when was this closed?" because the file it lives in already answers which state it's in.
-
-### Loop identity and git traceability
-
-Loops have no stable identifier (no UUID, no sequential number). Their identity is the combination of their title text and creation date. This is a deliberate simplicity trade-off:
-
-- **Reconstructing lifecycle from git:** `git log -p --all -S "Loop title"` will find every commit that added or removed a line containing that title, across all files. This recovers creation, edits, and closure timestamps from commit metadata. The `git_age` module could be extended to automate this.
-- **Fragility:** If a user edits a loop's title (e.g. fixing a typo, adding detail), the old and new versions are different strings. Git diff will show the change within a single commit, but programmatic matching across commits requires fuzzy string comparison -- which AdzeKit does not currently do.
-- **Mitigation:** In practice this works because (a) loops are short-lived commitments, not long-running records, (b) most edits happen before any state transition, and (c) the cost of a broken link in the closed archive is low. If stable identity ever becomes important (e.g. for metrics dashboards), the format can be extended with an inline ID like `{#a1b2c3}` without breaking existing loops.
+**Identity:** No UUIDs. Identity is title + date. `git log -p --all -S "title"` recovers the full lifecycle. This works because loops are short-lived commitments, not long-running records.
 
 ## Projects
 
-**Path:** `projects/active/<slug>.md`, `projects/backlog/<slug>.md`, `projects/archive/<slug>.md`
+**Path:** `projects/<slug>.md` (active), `projects/backlog/`, `projects/archive/`
 
-One markdown file per project. The slug is the filename. Move the file between `active/`, `backlog/`, and `archive/` to change its state.
-
-Every project has exactly three sections:
+One file per project. Maximum 3 active at any time.
 
 ```markdown
 # Project Title #tag
 
 ## Context
-Why this project exists, who it serves, what success looks like, and any
-constraints or dependencies. Write just enough that someone (including
-future-you) can pick the file up cold and understand the stakes.
+Why this exists, who it serves, what success looks like.
 
 ## Log
-- YYYY-MM-DD: Reverse-chronological entries -- decisions, progress,
-  blockers, and tasks. The most recent entry is always on top.
-- [ ] Pending tasks live here too, interleaved with dated events.
+- YYYY-MM-DD: Reverse-chronological. Decisions, progress, blockers, tasks.
+- [ ] Pending tasks interleaved with dated events.
 
 ## Notes
-Freeform scratch space. Paste reference links, sketch ideas, capture
-meeting snippets -- anything that supports the project but doesn't
-belong in the running Log.
+Freeform scratch. Links, sketches, meeting snippets.
 ```
 
-**Why these three and only three?**
-
-- **Context** pins down *why* the project matters once and stays mostly
-  stable. Without it every re-read starts with "wait, what was this?"
-- **Log** captures *what happened and what's next* in time order. Mixing
-  tasks and events in a single stream keeps the narrative honest --
-  priorities and progress live side by side.
-- **Notes** is the pressure-relief valve. Anything that doesn't fit the
-  structured sections goes here instead of cluttering Context or Log.
-
-WIP limit: maximum 3 files in `active/` at any time.
+**Why three sections:** Context pins down *why* once. Log captures *what happened* in time order. Notes is the pressure-relief valve so the other two stay clean.
 
 ## Knowledge Notes
 
 **Path:** `knowledge/<slug>.md`
 
-Evergreen notes. The slug is the filename.
+Evergreen notes that grow as you learn.
 
 ```markdown
 # Topic Title
 
-#topic
+#topic #related-tags
 
-Content goes here. Use standard [markdown links](../knowledge/other-note.md) to connect to other notes.
+Content. Use [markdown links](../knowledge/other-note.md) to connect notes.
+
+**Event (YYYY-MM-DD):** Dated entries appended as knowledge accumulates.
 ```
-
-## Bench
-
-**Path:** `bench.md`
-
-The bench is the workbench where you lay out agent proposals and decide
-what to do with each one. In woodworking, the bench is the
-decision-making surface -- you bring pieces here to evaluate, route, or
-discard. In AdzeKit, the bench surfaces pending items from `drafts/` for
-human processing.
-
-The bench replaced the original `inbox.md` (a freeform capture bucket
-that went unused because daily `## Log` already handles quick capture
-and loops handle commitments directly).
-
-```markdown
-# Bench
-
-## Pending
-- [ ] [2026-03-05 14:30] inbox-zero -- 13 actions, 2 drafts (drafts/inbox-zero-2026-03-05-1430.md)
-- [ ] [2026-03-05 17:00] slack-digest -- 7 DMs, 4 threads (drafts/slack-digest-2026-03-05-1700.md)
-
-## Quick Capture
-- [2026-03-05] Unrouted thought that needs a home
-```
-
-### Processing rules
-
-1. The agent appends an entry to `## Pending` whenever it writes a new
-   file to `drafts/`. The entry links to the draft file and summarizes
-   what needs human action.
-2. The human marks items `[x]` after processing (copying loops, reading
-   starred emails, applying proposals).
-3. `adzekit sweep` clears checked items from `## Pending` and optionally
-   deletes the corresponding draft file.
-4. `## Quick Capture` retains the original inbox role for the rare
-   orphan thought, but it is a secondary purpose.
-
-### CLI: `adzekit cull`
-
-`adzekit cull` scans `drafts/` for files not yet listed in `## Pending`
-and appends entries for them. It is idempotent -- running it twice
-produces no duplicates.
 
 ## Reviews
 
@@ -327,59 +167,70 @@ produces no duplicates.
 Weekly review output. One file per ISO week.
 
 ```markdown
-# 2026 Week 07 Review (2026-02-15)
+# 2026 Week 15 Review (2026-04-13)
 
-## Open Loops
+## Active Loops
+[List each: acted on / overdue / upcoming]
 
 ## Active Projects
+[Table: slug, last activity, status, this week summary]
 
 ## Decisions
-- Kill, defer, or commit?
+- What am I saying no to?
+- What trade-offs am I hiding from myself?
 
 ## Reflection
-- What drained me this week?
+- What drained me?
 - What energized me?
 - What will I stop doing next week?
 ```
 
-## Task Markers
+## Skills
 
-| Marker | Meaning |
-|--------|---------|
-| `- [ ]` | Open task |
-| `- [x]` | Closed task |
+**Path:** `skills/<name>.md`
 
-Tasks support optional inline annotations for sizing and deadlines:
+Skill definitions that Claude Code slash commands point to. Skills are full markdown documents describing a workflow: prerequisites, shed access patterns, step-by-step instructions, safety rules.
 
-- **T-shirt sizes** -- append `(S)`, `(M)`, `(L)`, or `(XL)` to signal relative effort. No story points, no hour estimates -- just enough to eyeball a week's capacity.
-- **Deadlines** -- append a date in `(YYYY-MM-DD)` when a task is tied to a hard date.
-
-Both annotations are optional and can be combined:
-
-```markdown
-- [ ] Draft API proposal (M)
-- [ ] Submit compliance report (L) (2026-03-20)
-- [ ] Quick fix for login bug (S)
+Commands in `.claude/commands/` are thin pointers:
+```yaml
+---
+description: Short description
+argument-hint: Optional args
+---
+Read and execute the skill defined in `{SHED}/skills/<name>.md`.
 ```
 
-Estimation tooling will be built around these sizes to surface workload and forecast throughput.
+This keeps skill logic in the shed (committable, editable, diffable) while registering them as slash commands.
 
-## Export
+## Tags
 
-AdzeKit uses pandoc to convert markdown to `.docx`. This is the primary path for sharing documents with stakeholders who work in Word or Google Docs.
+Tags are `#word` or `#hyphenated-word` tokens anywhere in a document. Case-insensitive (`#Acme` = `#acme`). No registry — the filesystem is the source of truth.
 
-- `adzekit export <file.md>` converts any markdown file to `.docx` alongside the source.
-- `adzekit export <file.md> -o path/to/output.docx` writes to a specific path.
-- `adzekit poc-init <slug> --docx` generates a POC template and converts it in one step.
+Tag types distinguish themselves naturally:
+- People: `#alice-chen`
+- Topics: `#vector-search`
+- Clients: `#acme`
+- References: `#AR-000109761`
 
-For Google Docs: export to `.docx`, then upload to Google Drive which auto-converts on import.
+## Stock
 
-Pandoc is an external dependency (`brew install pandoc`) and is not bundled with AdzeKit.
+**Path:** `stock/<project-slug>/`
+
+Raw materials — transcripts, PDFs, recordings. Git-ignored, synced via rclone.
+
+## Drafts
+
+**Path:** `drafts/`
+
+Agent proposals awaiting human review. Git-ignored, ephemeral.
+
+**Batch patch pattern:** Skills producing many proposals consolidate into a single patch file (`drafts/<skill>-patch-YYYY-MM-DD.md`) with per-file drafts and `cp` commands. One file to review, batch decisions to make.
+
+**Watermarks:** `drafts/<skill>-watermark.md` tracks latest processed timestamp per source. Delete to force rescan.
 
 ## What This Spec Does Not Cover
 
-- Where the shed lives (local, git, Dropbox -- user's choice)
-- Which editor is used (Obsidian, VS Code, Vim -- all work)
-- How tools are run (CLI, UI, scripts -- package concern)
+- Where the shed lives (local, git, Dropbox)
+- Which editor (Obsidian, VS Code, Vim)
+- How tools run (CLI, skills, scripts)
 - AI behavior (tool concern, not backbone concern)
-- Link conventions, knowledge graphs, or indices (tool concern)
