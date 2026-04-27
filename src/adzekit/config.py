@@ -23,7 +23,7 @@ from pathlib import Path
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BACKBONE_VERSION = 1
+BACKBONE_VERSION = 2
 MARKER_FILE = ".adzekit"
 
 # Global config file — persists shed path across sessions and terminal resets.
@@ -214,6 +214,10 @@ class Settings(BaseSettings):
         return self.shed / "drafts"
 
     @property
+    def graph_dir(self) -> Path:
+        return self.shed / "graph"
+
+    @property
     def marker_path(self) -> Path:
         return self.shed / MARKER_FILE
 
@@ -334,6 +338,7 @@ class Settings(BaseSettings):
             self.daily_dir,
             self.knowledge_dir,
             self.reviews_dir,
+            self.graph_dir,
             self.stock_dir,
             self.drafts_dir,
         ]:

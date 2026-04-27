@@ -150,7 +150,7 @@ def test_init_shed_writes_marker(workspace):
     init_shed(workspace)
     assert workspace.marker_path.exists()
     content = workspace.marker_path.read_text()
-    assert "backbone_version = 1" in content
+    assert "backbone_version = 2" in content
 
 
 def test_is_initialized(workspace):
@@ -200,7 +200,7 @@ def test_cli_init_works_on_fresh_dir(tmp_path):
 
     s = Settings(shed=target)
     assert s.is_initialized
-    assert s.shed_backbone_version == 1
+    assert s.shed_backbone_version == 2
 
 
 def test_settings_loads_config_from_adzekit(tmp_path, monkeypatch):

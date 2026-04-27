@@ -1,6 +1,8 @@
-# AdzeKit Backbone Specification v1
+# AdzeKit Backbone Specification v2
 
 A short, versioned contract. Any folder that conforms to this spec is an AdzeKit-compatible shed. The backbone is a specification, not a codebase.
+
+**v2 changes from v1:** Added `graph/` compiled layer (git-tracked, agent-maintained). Added typed relationship syntax for knowledge notes. Updated access zones.
 
 ## Shed Layout
 
@@ -26,6 +28,10 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
   reviews/
     YYYY-WNN.md
   bench.md
+  graph/                  # git-tracked, agent-maintained compiled graph
+    entities.md
+    relations.md
+    index.md
   stock/                  # git-ignored, synced separately
     <project-slug>/
       <any file>
@@ -43,7 +49,17 @@ Everything above except `stock/` and `drafts/`. The backbone is the human's doma
 
 Backbone directories: `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `bench.md`.
 
-### Workbench (agent-writable)
+### Graph (compiled layer, agent-maintained, git-tracked)
+
+**`graph/`** -- The compiled knowledge graph. Built by `adzekit graph build` (or the `graph-update` skill) from all backbone content. Agent-written but git-tracked so the compiled graph travels with the shed.
+
+- **`graph/entities.md`** -- Entity registry: every discovered person, project, concept, tool, organization, loop, and event.
+- **`graph/relations.md`** -- Typed relationship index: every edge in the graph, grouped by relation type.
+- **`graph/index.md`** -- Summary: entity counts, most-connected nodes, orphans.
+
+The graph is compiled metadata, not raw content. Humans should not edit it manually -- run `adzekit graph build` to regenerate.
+
+### Workbench (agent-writable, git-ignored)
 
 Two directories where the agent can freely create and modify files:
 
@@ -59,7 +75,7 @@ Both directories are git-ignored.
 Every initialized shed contains a `.adzekit` file at the root. It identifies the directory as an AdzeKit shed, declares the backbone spec version, and holds per-shed tuning parameters:
 
 ```
-backbone_version = 1
+backbone_version = 2
 max_active_projects = 3
 max_daily_tasks = 5
 loop_sla_hours = 24
@@ -273,6 +289,63 @@ Evergreen notes. The slug is the filename.
 Content goes here. Use standard [markdown links](../knowledge/other-note.md) to connect to other notes.
 ```
 
+### Typed Relationship Syntax
+
+Knowledge notes declare entity relationships using bold headers on their own lines. This is the only frontmatter-free way to encode typed edges that `adzekit graph build` can parse.
+
+```markdown
+# Vector Search
+
+#vector-search #concept
+
+**is-a:** [[retrieval-method]], [[similarity-search]]
+**part-of:** [[retrieval-augmented-generation]]
+**used-by:** [[fourseasons-rag]], [[td-fraudai]]
+**relates-to:** [[knowledge-graphs]], [[feature-store]]
+**developed-by:** [[pinecone]], [[weaviate]]
+
+Approximate nearest-neighbour search over dense embedding vectors...
+```
+
+Format: `**<relation-type>:** [[target1]], [[target2]]` or plain comma-separated text.
+
+`[[WikiLink]]` syntax anywhere in the body (outside typed headers) auto-generates a `relates-to` edge.
+
+### Entity Ontology
+
+Every entity has exactly one canonical type. When a tag or note is ambiguous, apply these rules in order:
+
+| Type | When to use | Tag / source pattern |
+|------|-------------|----------------------|
+| `person` | Named individual | `#firstname-lastname` (two+ hyphen-separated words) |
+| `organization` | Company, team, client, institution | `#org-name` in any file; `#organization` hint tag |
+| `project` | Active/backlog/archived work item | Filename in `projects/` |
+| `concept` | Abstract idea, pattern, methodology | Knowledge note without `#tool` tag |
+| `tool` | Software product, platform, API, service | Knowledge note with `#tool` tag |
+| `loop` | Tracked commitment | Entry in `loops/active.md` |
+| `event` | Specific time-bound occurrence | Knowledge note with `#event` tag |
+
+**Disambiguation:** If a name is both a company and a product (e.g. Databricks), create one knowledge note and tag it with both `#organization` and `#tool`. The graph builder uses the note's tags to pick the canonical type (tool wins over organization when both are present).
+
+### Relationship Ontology
+
+All relationships are directed. Inverses are not stored separately.
+
+| Relation | Direction | Description | Example |
+|----------|-----------|-------------|---------|
+| `is-a` | specific → general | Taxonomic subsumption. Transitive. | `genie is-a databricks-tool` |
+| `part-of` | component → whole | Compositional membership | `genie part-of databricks` |
+| `uses` | consumer → provider | Dependency or employment | `td-fraudai uses databricks` |
+| `relates-to` | symmetric | General association; auto-generated from `[[WikiLinks]]` | `vector-search relates-to knowledge-graphs` |
+| `owned-by` | artifact → owner | Project/work owned by person/org | `td-fraudai owned-by ryan-bondaria` |
+| `assigned-to` | loop → person | Commitment owed to/from a person; extracted from loop `--who` | `send-estimate assigned-to alice-chen` |
+| `mentioned-in` | entity → document | Entity appears in a project/note | `databricks mentioned-in td-fraudai` |
+| `developed-by` | artifact → creator | Tool/concept created by person/org | `claude developed-by anthropic` |
+| `contradicts` | A → B | Logical/practical opposition (symmetric in practice) | `data-mesh contradicts centralized-platform` |
+| `extends` | extension → base | Builds on or specialises | `software-3-0 extends software-2-0` |
+
+Use the most specific relation that applies. Fall back to `relates-to` only when no typed relation fits.
+
 ## Bench
 
 **Path:** `bench.md`
@@ -377,5 +450,4 @@ Pandoc is an external dependency (`brew install pandoc`) and is not bundled with
 - Where the shed lives (local, git, Dropbox -- user's choice)
 - Which editor is used (Obsidian, VS Code, Vim -- all work)
 - How tools are run (CLI, UI, scripts -- package concern)
-- AI behavior (tool concern, not backbone concern)
-- Link conventions, knowledge graphs, or indices (tool concern)
+- AI behavior beyond graph/ write access (tool concern, not backbone concern)

@@ -9,6 +9,7 @@
 | 4: AI Layer | LLM client, tool registry, orchestrator agent | Done |
 | 5: UI Layer | FastAPI local dashboard, agent chat | Done |
 | 6: Gmail Integration | OAuth, inbox triage, draft replies, archive | Done |
-| 7: Agent Polish | Conversation memory, streaming responses, auto-schedule | Next |
-| 8: Calendar Integration | Google Calendar read/write, deep work blocks | Planned |
-| 9: Slack Integration | Message triage, status updates, loop creation | Planned |
+| 7: Knowledge Graph | Entity/relationship ontology, graph builder, CLI, graph-update skill | Done |
+| 8: Agent Polish | Conversation memory, streaming responses, graph-aware context | Next |
+| 9: Calendar Integration | Google Calendar read/write, deep work blocks | Planned |
+| 10: Slack Integration | Message triage, status updates, loop creation | Planned |

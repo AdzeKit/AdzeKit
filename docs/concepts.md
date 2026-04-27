@@ -46,6 +46,18 @@ Every backbone convention and every package feature traces back to one of these 
 
 **How AdzeKit enforces it:** The weekly review surfaces all active projects and open loops. You see who you owe updates to and can draft a brief, honest status message during the review ritual.
 
+## Principle 6: Graph over Similarity
+
+**The problem:** Tags and keyword search find documents that *contain* a word -- but your brain doesn't work that way. It navigates associative networks: Alice is a consultant, who works at Acme, who uses Databricks, which is a data platform used in the FraudAI project. Fuzzy retrieval finds individual nodes; a graph traverses the paths between them.
+
+**The rule:** Every knowledge note declares its typed relationships explicitly. Every entity -- person, project, tool, concept -- is a node. Connections are first-class citizens, not implied by co-occurrence.
+
+**The Graphify insight:** Knowledge retrieval through an explicit entity-relationship graph reduces the token cost of context assembly by an order of magnitude compared to dumping raw files at an LLM. Compile the structure once; query it cheaply, many times.
+
+**The Karpathy LLM Wiki pattern:** Treat backbone files as immutable source code. An LLM compiles them into a structured, interlinked knowledge graph that self-heals as sources change. This is the graph-update skill: reads all backbone content, infers relationships, writes to `graph/` for future queries.
+
+**How AdzeKit enforces it:** Knowledge notes declare typed relationships using bold headers (`**is-a:**`, `**uses:**`, `**developed-by:**`). `[[WikiLink]]` syntax auto-generates `relates-to` edges. `adzekit graph build` compiles the full graph from all backbone content. `adzekit graph query <entity>` returns a compressed subgraph context. Agents use `shed_get_graph_context()` instead of file-dumping.
+
 ## AdzeKit and Bullet Journal
 
 Bullet journaling at its core is about:
@@ -76,3 +88,5 @@ Conceptually, AdzeKit is a Bullet Journal-compatible digital workshop for people
 **N5: Rituals as Structure.** Daily and weekly checklists keep you organized and reflective -- even as tools change. Morning and evening templates guide planning and review. The practice works without any software at all.
 
 **N6: Human Always Decides.** Critical choices -- like accepting new work or sending updates -- are always yours. AI provides drafts and suggestions, but humans make the final call.
+
+**N7: Associative Networks.** The brain stores knowledge as a graph of typed associations, not a flat index of keywords. "What is vector search?" is answered not by scanning every document for the phrase, but by traversing: vector-search *is-a* retrieval-method, *used-by* fourseasons-rag, *relates-to* knowledge-graphs. AdzeKit's knowledge graph mirrors this structure: each entity has typed edges, each query traverses hops, and the result is a compressed, navigable context that an LLM can reason over efficiently.
