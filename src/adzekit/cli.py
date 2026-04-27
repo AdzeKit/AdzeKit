@@ -393,6 +393,101 @@ def cmd_agent(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+# -- graph -----------------------------------------------------------------
+
+
+def cmd_graph(args: argparse.Namespace) -> None:
+    """Knowledge graph operations."""
+    sub = getattr(args, "graph_command", None)
+    if sub == "build":
+        _cmd_graph_build(args)
+    elif sub == "query":
+        _cmd_graph_query(args)
+    elif sub == "stats":
+        _cmd_graph_stats(args)
+    elif sub == "orphans":
+        _cmd_graph_orphans(args)
+    else:
+        print("graph: specify a subcommand (build, query, stats, orphans)")
+
+
+def _cmd_graph_build(args: argparse.Namespace) -> None:
+    from adzekit.modules.graph import build_graph, graph_stats, save_graph
+
+    settings = _resolve_settings(args)
+    print("Building knowledge graph...")
+    graph = build_graph(settings)
+    save_graph(graph, settings)
+    stats = graph_stats(graph)
+    print(
+        f"Graph built: {stats['total_entities']} entities, "
+        f"{stats['total_relationships']} relationships"
+    )
+    print(
+        f"  {stats['people']} people  {stats['organizations']} orgs  "
+        f"{stats['projects']} projects  {stats['concepts']} concepts  "
+        f"{stats['tools']} tools  {stats['loops']} loops"
+    )
+    print(f"  Written to: {settings.graph_dir}")
+
+
+def _cmd_graph_query(args: argparse.Namespace) -> None:
+    from adzekit.modules.graph import get_context, load_graph
+
+    settings = _resolve_settings(args)
+    graph = load_graph(settings)
+    if graph is None:
+        print("No graph found. Run: adzekit graph build")
+        raise SystemExit(1)
+    depth = getattr(args, "depth", 2)
+    print(get_context(args.entity, graph, depth=depth))
+
+
+def _cmd_graph_stats(args: argparse.Namespace) -> None:
+    from adzekit.modules.graph import graph_stats, load_graph
+
+    settings = _resolve_settings(args)
+    graph = load_graph(settings)
+    if graph is None:
+        print("No graph found. Run: adzekit graph build")
+        raise SystemExit(1)
+    stats = graph_stats(graph)
+    built = graph.built_at.isoformat() if graph.built_at else "unknown"
+    print(f"Built:         {built}")
+    print(f"Entities:      {stats['total_entities']}")
+    print(f"  People:      {stats['people']}")
+    print(f"  Orgs:        {stats['organizations']}")
+    print(f"  Projects:    {stats['projects']}")
+    print(f"  Concepts:    {stats['concepts']}")
+    print(f"  Tools:       {stats['tools']}")
+    print(f"  Loops:       {stats['loops']}")
+    print(f"Relationships: {stats['total_relationships']}")
+
+
+def _cmd_graph_orphans(args: argparse.Namespace) -> None:
+    from adzekit.modules.graph import load_graph
+
+    settings = _resolve_settings(args)
+    graph = load_graph(settings)
+    if graph is None:
+        print("No graph found. Run: adzekit graph build")
+        raise SystemExit(1)
+    connected = (
+        {r.source for r in graph.relationships}
+        | {r.target for r in graph.relationships}
+    )
+    orphans = sorted(
+        (e for e in graph.entities.values() if e.name not in connected),
+        key=lambda e: (e.entity_type.value, e.name),
+    )
+    if not orphans:
+        print("No orphans -- all entities are connected.")
+        return
+    print(f"{len(orphans)} orphan(s):")
+    for e in orphans:
+        print(f"  {e.name} ({e.entity_type.value})")
+
+
 # -- set-shed --------------------------------------------------------------
 
 
@@ -640,6 +735,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_agent = sub.add_parser("agent", help="Run the agent with a one-shot message.")
     p_agent.add_argument("message", help="Message to send to the agent.")
     p_agent.set_defaults(func=cmd_agent)
+
+    # graph
+    p_graph = sub.add_parser("graph", help="Knowledge graph operations.")
+    p_graph.set_defaults(func=cmd_graph, graph_command=None)
+    graph_sub = p_graph.add_subparsers(dest="graph_command")
+
+    p_graph_build = graph_sub.add_parser("build", help="Build knowledge graph from shed content.")
+    p_graph_build.set_defaults(func=cmd_graph, graph_command="build")
+
+    p_graph_query = graph_sub.add_parser("query", help="Query graph context for an entity.")
+    p_graph_query.add_argument("entity", help="Entity name (slug, e.g. vector-search).")
+    p_graph_query.add_argument(
+        "--depth", type=int, default=2,
+        help="Traversal depth (default: 2).",
+    )
+    p_graph_query.set_defaults(func=cmd_graph, graph_command="query")
+
+    p_graph_stats = graph_sub.add_parser("stats", help="Show graph statistics.")
+    p_graph_stats.set_defaults(func=cmd_graph, graph_command="stats")
+
+    p_graph_orphans = graph_sub.add_parser("orphans", help="List entities with no connections.")
+    p_graph_orphans.set_defaults(func=cmd_graph, graph_command="orphans")
 
     # tags
     p_tags = sub.add_parser("tags", help="List, search, or autocomplete tags.")

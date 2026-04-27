@@ -265,6 +265,33 @@ def shed_save_to_stock(project_slug: str, filename: str, content: str) -> str:
 
 
 @registry.register(
+    name="shed_get_graph_context",
+    description=(
+        "Return compressed knowledge graph context for an entity. "
+        "More precise than file-dumping: returns typed relationships and "
+        "connected entities within the requested hop depth. "
+        "Requires the graph to have been built with `adzekit graph build`."
+    ),
+    param_descriptions={
+        "entity": "Entity name (slug, e.g. 'vector-search', 'alice-chen', 'td-fraudai').",
+        "depth": "Traversal depth — 1 for direct neighbours, 2 for 2-hop context (default: 2).",
+    },
+)
+def shed_get_graph_context(entity: str, depth: int = 2) -> str:
+    from adzekit.modules.graph import get_context, load_graph
+
+    settings = _settings()
+    graph = load_graph(settings)
+    if graph is None:
+        return json.dumps({
+            "error": "Graph not built. Run: adzekit graph build",
+            "entity": entity,
+        })
+    context = get_context(entity, graph, depth=depth)
+    return json.dumps({"entity": entity, "depth": depth, "context": context})
+
+
+@registry.register(
     name="shed_list_drafts",
     description="List all files in drafts/ awaiting human review.",
 )

@@ -68,6 +68,10 @@ def init_shed(settings: Settings | None = None) -> Path:
     if not any(settings.knowledge_dir.iterdir()):
         _seed_knowledge_note(settings)
 
+    # Seed graph/index.md placeholder if graph/ is empty
+    if not any(settings.graph_dir.iterdir()):
+        _seed_graph_index(settings)
+
     return settings.shed
 
 
@@ -118,6 +122,16 @@ def create_review(
 def _seed_review(today: date, settings: Settings) -> None:
     """Create an example weekly review file (used by init)."""
     create_review(today, settings)
+
+
+def _seed_graph_index(settings: Settings) -> None:
+    """Create a placeholder graph/index.md before the first build."""
+    path = settings.graph_dir / "index.md"
+    path.write_text(
+        "# Knowledge Graph Index\n\n"
+        "Graph not yet built. Run: adzekit graph build\n",
+        encoding="utf-8",
+    )
 
 
 def _seed_knowledge_note(settings: Settings) -> None:

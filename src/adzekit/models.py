@@ -8,6 +8,87 @@ from datetime import date
 from enum import Enum
 
 
+# ---------------------------------------------------------------------------
+# Knowledge Graph Ontology
+# ---------------------------------------------------------------------------
+
+
+class EntityType(str, Enum):
+    """Canonical entity types in the AdzeKit knowledge graph.
+
+    Person       Named individual — detected from #firstname-lastname tags.
+    Organization Company, team, client, or institution.
+    Project      Active/backlog/archive work item from projects/.
+    Concept      Abstract idea, pattern, methodology, or domain area.
+    Tool         Software product, platform, API, or service.
+    Loop         Tracked commitment from loops/active.md.
+    Event        Specific time-bound occurrence.
+    """
+
+    PERSON = "person"
+    ORGANIZATION = "organization"
+    PROJECT = "project"
+    CONCEPT = "concept"
+    TOOL = "tool"
+    LOOP = "loop"
+    EVENT = "event"
+
+
+class RelationType(str, Enum):
+    """Typed edge labels in the AdzeKit knowledge graph.
+
+    is-a          Taxonomic: A is a subtype/instance of B. Transitive.
+    part-of       Compositional: A is a component of B.
+    uses          Dependency: A employs or depends on B.
+    relates-to    General association (symmetric). Auto-generated from [[WikiLinks]].
+    owned-by      Accountability: project/work owned by person/org.
+    assigned-to   Commitment: loop owed to/from a person.
+    mentioned-in  Co-occurrence: entity appears in a document.
+    developed-by  Provenance: tool/concept created by person/org.
+    contradicts   Opposition: A conflicts with B (symmetric in practice).
+    extends       Augmentation: A builds on or specialises B.
+    """
+
+    IS_A = "is-a"
+    PART_OF = "part-of"
+    USES = "uses"
+    RELATES_TO = "relates-to"
+    OWNED_BY = "owned-by"
+    ASSIGNED_TO = "assigned-to"
+    MENTIONED_IN = "mentioned-in"
+    DEVELOPED_BY = "developed-by"
+    CONTRADICTS = "contradicts"
+    EXTENDS = "extends"
+
+
+@dataclass
+class Entity:
+    """A node in the knowledge graph."""
+
+    name: str
+    entity_type: EntityType
+    sources: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Relationship:
+    """A typed directed edge in the knowledge graph."""
+
+    source: str
+    target: str
+    relation_type: RelationType
+    source_file: str = ""
+
+
+@dataclass
+class KnowledgeGraph:
+    """In-memory knowledge graph for a shed."""
+
+    entities: dict[str, Entity] = field(default_factory=dict)
+    relationships: list[Relationship] = field(default_factory=list)
+    built_at: date | None = None
+
+
 class LoopStatus(str, Enum):
     OPEN = "open"
     CLOSED = "closed"
