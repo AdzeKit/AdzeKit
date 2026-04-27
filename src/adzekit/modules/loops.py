@@ -175,7 +175,7 @@ def get_overdue_loops(settings: Settings | None = None) -> list[Loop]:
     """Return active loops that are past their due date."""
     settings = settings or get_settings()
     today = date.today()
-    return [l for l in get_active_loops(settings) if l.due and l.due < today]
+    return [loop for loop in get_active_loops(settings) if loop.due and loop.due < today]
 
 
 def get_approaching_sla(settings: Settings | None = None) -> list[Loop]:
@@ -183,8 +183,8 @@ def get_approaching_sla(settings: Settings | None = None) -> list[Loop]:
     settings = settings or get_settings()
     cutoff = date.today() - timedelta(hours=settings.loop_sla_hours)
     return [
-        l for l in get_active_loops(settings)
-        if l.date <= cutoff and l.status.lower() != "closed"
+        loop for loop in get_active_loops(settings)
+        if loop.date <= cutoff and loop.status.lower() != "closed"
     ]
 
 

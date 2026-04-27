@@ -1,6 +1,6 @@
 """Tests for the bench cull module."""
 
-from adzekit.modules.bench import cull, _parse_bench, _referenced_filenames
+from adzekit.modules.bench import _parse_bench, _referenced_filenames, cull
 
 
 def test_cull_adds_new_drafts(workspace):

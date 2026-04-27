@@ -35,6 +35,7 @@ DEFAULT_MAX_ACTIVE_PROJECTS = 3
 DEFAULT_MAX_DAILY_TASKS = 5
 DEFAULT_LOOP_SLA_HOURS = 24
 DEFAULT_STALE_LOOP_DAYS = 7
+DEFAULT_STALE_DRAFT_DAYS = 7
 
 
 def _parse_kv_file(path: Path) -> dict[str, str]:
@@ -261,6 +262,11 @@ class Settings(BaseSettings):
         raw = self._read_marker().get("stale_loop_days")
         return int(raw) if raw else DEFAULT_STALE_LOOP_DAYS
 
+    @property
+    def stale_draft_days(self) -> int:
+        raw = self._read_marker().get("stale_draft_days")
+        return int(raw) if raw else DEFAULT_STALE_DRAFT_DAYS
+
     def require_initialized(self) -> None:
         """Raise ShedNotInitializedError if this shed has no .adzekit marker."""
         if not self.is_initialized:
@@ -275,12 +281,18 @@ class Settings(BaseSettings):
         self.shed.mkdir(parents=True, exist_ok=True)
         existing = self._read_marker()
 
+        max_proj = existing.get('max_active_projects', DEFAULT_MAX_ACTIVE_PROJECTS)
+        max_tasks = existing.get('max_daily_tasks', DEFAULT_MAX_DAILY_TASKS)
+        sla = existing.get('loop_sla_hours', DEFAULT_LOOP_SLA_HOURS)
+        stale = existing.get('stale_loop_days', DEFAULT_STALE_LOOP_DAYS)
+        stale_draft = existing.get('stale_draft_days', DEFAULT_STALE_DRAFT_DAYS)
         lines = [
             f"backbone_version = {BACKBONE_VERSION}",
-            f"max_active_projects = {existing.get('max_active_projects', DEFAULT_MAX_ACTIVE_PROJECTS)}",
-            f"max_daily_tasks = {existing.get('max_daily_tasks', DEFAULT_MAX_DAILY_TASKS)}",
-            f"loop_sla_hours = {existing.get('loop_sla_hours', DEFAULT_LOOP_SLA_HOURS)}",
-            f"stale_loop_days = {existing.get('stale_loop_days', DEFAULT_STALE_LOOP_DAYS)}",
+            f"max_active_projects = {max_proj}",
+            f"max_daily_tasks = {max_tasks}",
+            f"loop_sla_hours = {sla}",
+            f"stale_loop_days = {stale}",
+            f"stale_draft_days = {stale_draft}",
         ]
 
         # Connection settings -- only written when they have a value.

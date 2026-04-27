@@ -12,7 +12,6 @@ Usage:
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -116,6 +115,100 @@ def cmd_today(args: argparse.Namespace) -> None:
     print(path)
 
 
+# -- daily-start -----------------------------------------------------------
+
+
+def cmd_daily_start(args: argparse.Namespace) -> None:
+    """Bootstrap today's daily note from yesterday's context and active loops."""
+    from adzekit.modules.daily import daily_start
+
+    settings = _resolve_settings(args)
+    target = date.fromisoformat(args.date) if args.date else None
+    path, summary = daily_start(target_date=target, settings=settings)
+
+    if summary.get("already_exists"):
+        print(f"Today's note already exists at daily/{summary['date']}.md")
+        return
+
+    print(f"Daily Start -- {summary['date']} ({summary['weekday']})")
+    print(f"  Proposed tasks: {summary['proposed_tasks']}")
+    print(f"  Overdue loops:  {summary['overdue_count']}")
+    print(f"  Due today:      {summary['due_today_count']}")
+    print(f"  Carried:        {summary['carried_count']}")
+    print(f"  Active loops:   {summary['active_loops_total']}")
+    print(f"  Written:        {path}")
+
+
+# -- daily-close -----------------------------------------------------------
+
+
+def cmd_daily_close(args: argparse.Namespace) -> None:
+    """Append reflection line to today's note and sweep closed loops."""
+    from adzekit.modules.daily import daily_close
+
+    settings = _resolve_settings(args)
+    target = date.fromisoformat(args.date) if args.date else None
+    success, summary = daily_close(target_date=target, settings=settings)
+
+    if summary.get("no_note"):
+        print(f"No daily note for {summary['date']}. "
+              "Run `adzekit daily-start` first.")
+        return
+    if summary.get("already_closed"):
+        print("Today's note already has an > End: line.")
+        return
+
+    print(f"Daily Close -- {summary['date']}")
+    print(f"  Done:        {summary['done_count']}")
+    print(f"  Open:        {summary['open_count']}")
+    print(f"  Log entries: {summary['log_count']}")
+    print(f"  Tomorrow:    {summary['tomorrow_suggestion']}")
+    if summary.get("swept_count", 0) > 0:
+        print(f"  Swept:       {summary['swept_count']} loop(s) to archive")
+
+
+# -- prune-drafts ----------------------------------------------------------
+
+
+def cmd_prune_drafts(args: argparse.Namespace) -> None:
+    """Delete stale draft files from drafts/."""
+    from adzekit.modules.drafts import prune_drafts
+
+    settings = _resolve_settings(args)
+    deleted = prune_drafts(days=args.days, settings=settings)
+
+    if not deleted:
+        print("No stale drafts to prune.")
+    else:
+        for p in deleted:
+            print(f"  deleted: {p.name}")
+        print(f"\n{len(deleted)} draft(s) pruned.")
+
+
+# -- automate --------------------------------------------------------------
+
+
+def cmd_automate(args: argparse.Namespace) -> None:
+    """Install or uninstall launchd automation."""
+    from adzekit.modules.automate import install, uninstall
+
+    settings = _resolve_settings(args)
+
+    if args.action == "install":
+        paths = install(settings)
+        for p in paths:
+            print(f"  installed: {p.name}")
+        print(f"\n{len(paths)} plist(s) installed and loaded.")
+    elif args.action == "uninstall":
+        paths = uninstall(settings)
+        if not paths:
+            print("No plists found to uninstall.")
+        else:
+            for p in paths:
+                print(f"  removed: {p.name}")
+            print(f"\n{len(paths)} plist(s) unloaded and removed.")
+
+
 # -- review ----------------------------------------------------------------
 
 
@@ -132,7 +225,7 @@ def cmd_review(args: argparse.Namespace) -> None:
 # -- sweep -----------------------------------------------------------------
 
 
-def _log_sweep_to_daily(count: int, settings: "Settings") -> None:
+def _log_sweep_to_daily(count: int, settings) -> None:
     """Append a sweep entry to today's daily note under ## Log."""
     from adzekit.workspace import create_daily_note
 
@@ -565,7 +658,7 @@ def cmd_setup_sync(args: argparse.Namespace) -> None:
 
     if remote_name not in existing_remotes:
         print(f"No rclone remote named '{remote_name}' found.")
-        print(f"\nRun the following to create one:\n")
+        print("\nRun the following to create one:\n")
         print(f"  rclone config create {remote_name} drive\n")
         print("This will open a browser for Google OAuth.")
         print(f"Once done, re-run: adzekit setup-sync --remote {remote_name}")
@@ -585,7 +678,7 @@ def cmd_setup_sync(args: argparse.Namespace) -> None:
     settings.set_config("rclone_remote", remote_path)
 
     print(f"Saved rclone_remote = {remote_path} to {settings.marker_path}")
-    print(f"\nSetup complete. Run 'adzekit sync' to sync stock/ and drafts/.")
+    print("\nSetup complete. Run 'adzekit sync' to sync stock/ and drafts/.")
 
 
 # -- parser ----------------------------------------------------------------
@@ -621,6 +714,28 @@ def build_parser() -> argparse.ArgumentParser:
     # today
     p_today = sub.add_parser("today", help="Create/show today's daily note.")
     p_today.set_defaults(func=cmd_today)
+
+    # daily-start
+    p_ds = sub.add_parser(
+        "daily-start",
+        help="Bootstrap today's daily note from context.",
+    )
+    p_ds.add_argument(
+        "--date", default=None,
+        help="Target date (YYYY-MM-DD, default: today).",
+    )
+    p_ds.set_defaults(func=cmd_daily_start)
+
+    # daily-close
+    p_dc = sub.add_parser(
+        "daily-close",
+        help="Close today's note with reflection and sweep.",
+    )
+    p_dc.add_argument(
+        "--date", default=None,
+        help="Target date (YYYY-MM-DD, default: today).",
+    )
+    p_dc.set_defaults(func=cmd_daily_close)
 
     # review
     p_review = sub.add_parser("review", help="Create/show this week's review.")
@@ -678,11 +793,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     # export
     p_export = sub.add_parser("export", help="Export a markdown file to docx.")
-    p_export.add_argument("file", help="Path to the markdown file (relative to shed root, or absolute).")
+    p_export.add_argument(
+        "file",
+        help="Path to the markdown file (relative to shed root, or absolute).",
+    )
     p_export.add_argument(
         "-o", "--output",
         default=None,
-        help="Output path, relative to shed root or absolute (default: same directory, .docx extension).",
+        help="Output path, relative to shed or absolute (default: .docx extension).",
     )
     p_export.set_defaults(func=cmd_export)
 
@@ -728,7 +846,10 @@ def build_parser() -> argparse.ArgumentParser:
         "set-shed",
         help="Set the global shed path (persists across sessions and terminal resets).",
     )
-    p_set_shed.add_argument("path", help="Path to the AdzeKit shed (e.g. ~/Repos/adzekit-workspace).")
+    p_set_shed.add_argument(
+        "path",
+        help="Path to the AdzeKit shed (e.g. ~/Repos/adzekit-workspace).",
+    )
     p_set_shed.set_defaults(func=cmd_set_shed)
 
     # agent
@@ -772,6 +893,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate .vscode/adzekit.code-snippets for Cursor autocomplete.",
     )
     p_tags.set_defaults(func=cmd_tags)
+
+    # prune-drafts
+    p_pd = sub.add_parser("prune-drafts", help="Delete stale draft files.")
+    p_pd.add_argument(
+        "--days", type=int, default=None,
+        help="Delete files older than N days (default: from config or 7).",
+    )
+    p_pd.set_defaults(func=cmd_prune_drafts)
+
+    # automate
+    p_auto = sub.add_parser(
+        "automate", help="Install/uninstall launchd automation.",
+    )
+    p_auto.add_argument(
+        "action", choices=["install", "uninstall"],
+        help="install or uninstall launchd plists.",
+    )
+    p_auto.set_defaults(func=cmd_automate)
 
     return parser
 

@@ -7,7 +7,6 @@ structured data. The parser module handles the extraction.
 from datetime import date
 
 from adzekit.parser import (
-    format_loop,
     format_loops,
     format_tasks,
     parse_daily_note,
