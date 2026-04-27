@@ -65,15 +65,12 @@ def test_generate_poc_has_all_sections(workspace):
 
     expected_sections = [
         "## TL;DR",
-        "## Goals & Non-Goals",
-        "## Problem",
-        "### Why Now",
-        "## Solution Overview",
-        "### Component Map",
-        "## Requirements",
-        "## Prerequisites",
-        "## Implementation Plan",
-        "### Milestones",
+        "## Problem & Why Now",
+        "## What We'll Build",
+        "### Databricks Features Used",
+        "## Success Criteria",
+        "## Commitments",
+        "## Plan",
         "### Tasks",
         "## Results",
     ]

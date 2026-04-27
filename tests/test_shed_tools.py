@@ -4,8 +4,6 @@ Uses real shed fixtures -- no mocks.
 """
 
 import json
-import os
-from datetime import date
 
 import pytest
 

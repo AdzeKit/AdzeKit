@@ -22,63 +22,57 @@ POC_TEMPLATE = """\
 **Solution:**
 **Goal:**
 
-## Goals & Non-Goals
-
-**Goals**
-
--
--
--
-
-**Non-goals**
-
--
--
-
-## Problem
+## Problem & Why Now
 
 {context}
 
-### Why Now
+## What We'll Build
 
--
--
+Describe the approach -- what are we building, how does it work,
+and why this design over alternatives?
 
-## Solution Overview
+### Databricks Features Used
 
-Describe the approach at a high level -- what are we building, how does it work, and why this design over alternatives?
+- **Feature** -- Role in the POC.
 
-## Requirements
+## Success Criteria
 
-Each requirement has a success metric. We evaluate the POC against these.
+We evaluate the POC against these. If we hit them, the POC succeeded.
 
-- **R-1:** *Requirement description.* KPI: metric ≥ target.
-- **R-2:** *Requirement description.* KPI: metric ≥ target.
-- **R-3:** *Requirement description.* KPI: metric ≥ target.
+| # | What we're proving | How we'll measure it |
+|---|-------------------|---------------------|
+| 1 |                   |                     |
+| 2 |                   |                     |
+| 3 |                   |                     |
 
-### Component Map
+## Commitments
 
-- **Component A** --
-- **Component B** --
-- **Component C** --
+This works if both sides commit. Here's what each side owns.
 
-## Prerequisites
+**Databricks will:**
+- Build the core solution in 2-3 working sessions
+- Provide architecture guidance and best practices
+- Deliver documentation so the customer team can operate independently
 
-Describe what must be in place before work begins -- data access, environments, permissions, dependencies.
+**Customer will:**
+- Provide a named champion with dedicated time for the POC period
+- Load data into Databricks (or provide access) before Phase 1
+- Make SMEs available for 1-2 evaluation sessions
+- Commit to a production decision within 2 weeks of readout
 
-- [ ] Access credentials for all data sources
-- [ ] Target schema or output format defined
-- [ ] Development environment validated
-- [ ] Sample data available
+| Who | Role | Commitment |
+|-----|------|-----------|
+|     |      |           |
+|     |      |           |
 
-## Implementation Plan
+## Plan
 
-### Milestones
-
-- **Phase 0 — Setup & infra:**
-- **Phase 1 — Core pipeline:**
-- **Phase 2 — Integration & testing:**
-- **Phase 3 — Evaluation & readout:**
+| Phase | What happens | Target |
+|-------|-------------|--------|
+| 0 -- Align | Review data, confirm scope, validate access | Week 1 |
+| 1 -- Build | Core pipeline end-to-end | Weeks 2-3 |
+| 2 -- Refine | SME evaluation, iterate to success criteria | Week 4 |
+| 3 -- Readout | Present results, discuss production path | Week 5 |
 
 ### Tasks
 
@@ -86,11 +80,11 @@ Describe what must be in place before work begins -- data access, environments, 
 
 ## Results
 
-> *Populate after PoC execution.*
+> *Populate after POC execution.*
 
 - What worked:
 - What didn't:
-- Open questions for next phase:
+- Path to production:
 """
 
 

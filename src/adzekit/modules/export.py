@@ -10,10 +10,9 @@ import subprocess
 from pathlib import Path
 
 from docx import Document
-from docx.shared import Pt, RGBColor, Emu
-from docx.oxml.ns import qn, nsdecls
 from docx.oxml import parse_xml
-
+from docx.oxml.ns import nsdecls, qn
+from docx.shared import Pt, RGBColor
 
 # ---------------------------------------------------------------------------
 # Locate bundled assets shipped inside the package
