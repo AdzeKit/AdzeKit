@@ -5,12 +5,11 @@ When the LLM returns tool_use blocks, the orchestrator executes them
 and feeds results back until the LLM produces a final text response.
 """
 
-import json
 from dataclasses import dataclass, field
 
 from adzekit.agent.client import LLMSettings, chat, get_llm_settings
-from adzekit.agent.tools import ToolRegistry, registry as global_registry
-
+from adzekit.agent.tools import ToolRegistry
+from adzekit.agent.tools import registry as global_registry
 
 SYSTEM_PROMPT = """\
 You are AdzeKit, a personal productivity agent. You help the user manage their

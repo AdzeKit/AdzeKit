@@ -1,27 +1,18 @@
 # AdzeKit
 
-Prehistoric tools, modern brains, future-proof productivity.
+Prehistoric tools, LLM-disrupted world.
 
-## Mission
+An adze shapes wood by removing what doesn't belong. AdzeKit shapes your workday the same way — cap the work, close the loops, protect the deep hours.
 
-Make productivity human in the age of AI. Protect Type 2 thinking -- the slow, deep, deliberate cognition that produces real insight. Help knowledge workers survive the AI-driven input explosion without losing agency over their own work.
+## What It Is
 
-A **loop** is any commitment that would continue to nag at you if you didn't write it down -- especially promises to other people.
+**The Backbone** — a spec for organizing your work as plain markdown. Any folder that follows it is a *shed*. See [backbone-spec/schema.md](backbone-spec/schema.md).
 
-## Two Things
+**The Package** — Python tools that operate on any conforming shed.
 
-**The Backbone** -- a specification for how your shed is organized. Folder layout, file naming, inline `#tags`. No YAML frontmatter -- just plain markdown. Any folder that follows the spec is a shed. See [backbone-spec/schema.md](backbone-spec/schema.md).
+**The Skills** — Claude Code slash commands that automate workflows. Skills live in your shed, not the package.
 
-**The Package** -- Python tools that operate on any conforming shed. Point it at a folder and go.
-
-```bash
-export ADZEKIT_SHED=~/my-shed
-adzekit today
-```
-
-## Getting Started
-
-### 1. Install AdzeKit
+## Install
 
 ```bash
 git clone https://github.com/AdzeKit/AdzeKit.git
@@ -29,144 +20,60 @@ cd AdzeKit
 uv pip install -e ".[dev]"
 ```
 
-### 2. Initialize your shed
+## Quick Start
 
 ```bash
-uv run adzekit init ~/my-shed
-export ADZEKIT_SHED=~/my-shed
+adzekit init ~/my-shed           # Create a shed
+export ADZEKIT_SHED=~/my-shed    # Point to it
+
+adzekit today                    # Open today's daily note
+adzekit add-loop "Send estimate" # Track a commitment
+adzekit status                   # Shed health at a glance
+adzekit sweep                    # Archive completed loops
+adzekit tags                     # List all #tags
 ```
 
-This creates the backbone directory structure. Your shed is a plain folder -- edit files with any editor, sync with git, back up however you like.
+## Five Principles
 
-### 3. Basic commands
-
-```bash
-adzekit today              # Open/create today's daily note
-adzekit add-loop "Send estimate" --who Alice --what "API estimate"
-adzekit status             # Show shed health summary
-adzekit sweep              # Move completed loops to closed archive
-adzekit tags               # List all #tags in the shed
-adzekit tags vector-search # Find every file that contains a tag
-adzekit tags --completions # Regenerate Cursor autocomplete snippets
-```
-
-Run `adzekit tags --completions` after adding new `#tags` to your notes. This scans every markdown file in the shed and writes `.vscode/adzekit.code-snippets` so Cursor offers tag autocomplete as you type.
-
-### 4. Run tests
-
-```bash
-uv run pytest
-```
+1. **Cap work-in-progress.** 3 active projects. 5 daily tasks. No exceptions, only trade-offs.
+2. **Close every loop.** Every commitment gets a response within 24 hours. Silence is never acceptable.
+3. **Protect deep work.** One 2-hour uninterrupted block daily. Non-negotiable.
+4. **Review, don't accumulate.** Weekly review: act, schedule, or close. No hoarding.
+5. **System comes to you.** Morning briefing arrives automatically. Evening close pre-fills itself. You decide, not remember.
 
 ## Architecture
 
 ```
-+----------------------------------------------+
-|  Skills (Claude Code commands in your shed)  |
-+----------------------------------------------+
-|  AI Layer (agent/)                           |
-+----------------------------------------------+
-|  Feature Layer (modules/)                    |
-+----------------------------------------------+
-|  Access Layer (config, models, parser,       |
-|                preprocessor, workspace)       |
-+----------------------------------------------+
-|  Backbone (your shed — plain markdown)       |
-+----------------------------------------------+
+Skills      Claude Code commands in your shed
+AI Layer    LLM reads backbone, writes to drafts/ only
+Features    Loop lifecycle, WIP limits, tags, git timestamps
+Access      Config, parser, models — all markdown I/O
+Backbone    Your shed — plain markdown, git-synced
 ```
 
-**Access Layer** -- Reads and writes the backbone. All markdown I/O lives here.
+The shed has two zones: the **backbone** (human-owned: `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`) and the **workbench** (agent-writable: `drafts/`, `stock/`). AI proposes, you decide.
 
-**Feature Layer** (`modules/`) -- Loop lifecycle, WIP limits, git timestamps, tag scanning, export.
+## Skills
 
-**AI Layer** (`agent/`) -- LLM client, tool registry, orchestrator. The agent can READ the backbone but CANNOT WRITE to it directly -- output goes to `drafts/`.
-
-**Skills** -- Claude Code slash commands (markdown files) that orchestrate agent capabilities into repeatable workflows. Skills live in your shed, not in the package.
-
-## Access Zones
-
-The shed has two access zones that enforce human control:
-
-| Zone | Directories | Who writes | Purpose |
-|------|-------------|-----------|---------|
-| **Backbone** | `daily/`, `loops/`, `projects/`, `knowledge/`, `reviews/`, `bench.md` | Human only | Your real data -- plans, commitments, reflections |
-| **Workbench** | `drafts/`, `stock/` | Agent-writable | Proposals awaiting review, raw materials |
-
-When an AI agent wants to suggest a backbone change (new loop, triage summary, daily note), it writes a proposal to `drafts/`. You review and apply -- or discard. The human always decides.
-
-## Skills & Claude Code Integration
-
-AdzeKit skills are Claude Code [slash commands](https://docs.anthropic.com/en/docs/claude-code/slash-commands) that automate productivity workflows. They live in your shed's `.claude/commands/` directory.
-
-### How it works
-
-1. **Skills** are markdown files that tell Claude Code how to work with your backbone
-2. **The backbone stays human-protected** -- skills can only write to `drafts/`
-3. **You review everything** -- skills propose, you decide
-
-### Included skill templates
+Skills are Claude Code slash commands registered in `.claude/commands/`. They point to full skill definitions in `skills/`.
 
 | Skill | What it does |
 |-------|-------------|
-| `inbox-zero` | Classify, label, and triage up to 100 emails. Draft replies, propose loops. |
-| `daily-start` | Pre-populate today's daily note from carried intentions and due loops. |
-| `weekly-review` | Generate a review draft with pulse summary from the week's data. |
-| `slack-digest` | Surface what matters from Slack channels, mentions, and discussions. |
-| `asq-lookup` | Cross-reference Salesforce ARs against your shed for tracking gaps. |
+| `/daily-start` | Morning briefing with focus line, carried tasks, stale draft alerts |
+| `/daily-close` | Evening wrap-up — pre-fill reflection, sweep loops, auto-commit |
+| `/log` | Quick-capture a timestamped entry to today's note |
+| `/inbox-zero` | Classify, label, triage email. Draft replies, propose loops. |
+| `/slack` | Digest + knowledge extraction + unread actions in one pass |
+| `/weekly-review` | Generate review from loops, projects, and daily logs |
+| `/loop-momentum` | Cross-reference loops against email, Slack, Jira for closure evidence |
+| `/asq-lookup` | Cross-reference Salesforce ARs against shed for tracking gaps |
 
-### Setting up skills in your shed
+## Docs
 
-Skills are templates in `src/adzekit/skills/`. To use them:
-
-```bash
-# Create the commands directory in your shed
-mkdir -p ~/my-shed/.claude/commands
-
-# Copy and personalize each skill
-cp src/adzekit/skills/inbox-zero.md ~/my-shed/.claude/commands/inbox-zero.md
-cp src/adzekit/skills/daily-start.md ~/my-shed/.claude/commands/daily-start.md
-# ... etc.
-```
-
-Then add frontmatter to each command file:
-```yaml
----
-description: Short description for the command palette
-argument-hint: Optional argument description
----
-```
-
-Personalize the skills for your workflow. Your shed is yours; the repo stays generic.
-
-## Configuration
-
-Settings come from environment variables (prefixed `ADZEKIT_`) or the `.adzekit` config file in your shed:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ADZEKIT_SHED` | `~/adzekit` | Shed path |
-| `ADZEKIT_GIT_REPO` | -- | Git remote URL (optional) |
-| `ADZEKIT_GIT_BRANCH` | `main` | Branch to sync |
-
-Per-shed settings in `.adzekit`:
-
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `max_active_projects` | 3 | WIP cap for active projects |
-| `max_daily_tasks` | 5 | Max intention items per daily note |
-| `loop_sla_hours` | 24 | Hours before a loop is flagged |
-| `stale_loop_days` | 7 | Days before a loop is flagged as stale |
-
-## Core Principles
-
-1. **Cap Work-in-Progress** -- Maximum 3 active projects. Maximum 5 daily tasks. No exceptions, only trade-offs.
-2. **Close Every Loop** -- Every commitment gets a response within 24 hours. Silence is never acceptable.
-3. **Protect Deep Work** -- Schedule uninterrupted blocks. Make calendar fragmentation visible.
-4. **Review, Don't Accumulate** -- Weekly review is non-negotiable. Act, schedule, or close.
-5. **Report Out Regularly** -- Weekly status to anyone waiting on you.
-
-See [docs/concepts.md](docs/concepts.md) for the full philosophy.
+- [Backbone Spec](backbone-spec/schema.md) — the contract your shed follows
+- [Philosophy](docs/philosophy.md) — why these principles, why this design
+- [Roadmap](docs/roadmap.md) — what's done, what's next
 
 ## Mantra
 
-Files first, rituals second, AI third.
+Files first. Rituals second. AI third.

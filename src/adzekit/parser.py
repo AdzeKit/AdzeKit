@@ -16,7 +16,6 @@ from adzekit.models import (
     Task,
 )
 
-
 # --- Loop parsing ---
 
 # Flat checklist format: - [ ] (SIZE) [DATE] title (DUE-DATE)
@@ -142,7 +141,7 @@ def format_loop(loop: Loop) -> str:
 
 def format_loops(loops: list[Loop]) -> str:
     """Serialize a list of loops to markdown lines."""
-    return "\n".join(format_loop(l) for l in loops)
+    return "\n".join(format_loop(loop) for loop in loops)
 
 
 # --- Task parsing ---
