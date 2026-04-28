@@ -1,6 +1,41 @@
 {% extends "base.html" %}
 {% block title_suffix %} - Dashboard{% endblock %}
 
+{% block head %}
+<style>
+    .tabs {
+        display: flex;
+        gap: 0.25rem;
+        margin-bottom: 0.75rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .tab {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 0.4rem 0.85rem;
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+    }
+    .tab .tab-count {
+        margin-left: 0.4rem;
+        color: var(--text-muted);
+        font-size: 0.72rem;
+    }
+    .tab.active .tab-count { color: var(--accent-dim); }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>// dashboard</h1>
 
@@ -41,6 +76,11 @@
 
 <div class="card">
     <h3>Projects</h3>
+    <div class="tabs" id="projects-tabs">
+        <button class="tab active" data-state="active" onclick="setProjectsTab('active')">Active <span class="tab-count" id="tab-count-active">0</span></button>
+        <button class="tab" data-state="backlog" onclick="setProjectsTab('backlog')">Backlog <span class="tab-count" id="tab-count-backlog">0</span></button>
+        <button class="tab" data-state="archive" onclick="setProjectsTab('archive')">Archive <span class="tab-count" id="tab-count-archive">0</span></button>
+    </div>
     <table id="projects-table">
         <thead>
             <tr>
@@ -102,31 +142,52 @@ async function loadDashboard() {
             `).join('');
         }
 
-        // Projects table
-        const projectsBody = document.getElementById('projects-body');
-        if (projects.length === 0) {
-            projectsBody.innerHTML = '<tr><td colspan="3" class="empty-state">No projects.</td></tr>';
-        } else {
-            projectsBody.innerHTML = projects.map(p => `
-                <tr>
-                    <td>${escapeHtml(p.title)}</td>
-                    <td><span class="badge badge-${p.state}">${p.state}</span></td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div class="progress-bar" style="flex: 1;">
-                                <div class="progress-bar-fill" style="width: ${p.progress * 100}%"></div>
-                            </div>
-                            <span style="font-family: var(--mono); font-size: 0.8rem; color: var(--text-muted);">
-                                ${p.done_tasks}/${p.total_tasks}
-                            </span>
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
+        // Projects: keep all in memory, render the active tab.
+        _allProjects = projects;
+        for (const s of ['active', 'backlog', 'archive']) {
+            const n = projects.filter(p => p.state === s).length;
+            document.getElementById(`tab-count-${s}`).textContent = n;
         }
+        renderProjects();
     } catch (err) {
         console.error('Failed to load dashboard:', err);
     }
+}
+
+let _allProjects = [];
+let _projectsTab = 'active';
+
+function setProjectsTab(state) {
+    _projectsTab = state;
+    document.querySelectorAll('#projects-tabs .tab').forEach(el => {
+        el.classList.toggle('active', el.dataset.state === state);
+    });
+    renderProjects();
+}
+
+function renderProjects() {
+    const body = document.getElementById('projects-body');
+    const filtered = _allProjects.filter(p => p.state === _projectsTab);
+    if (filtered.length === 0) {
+        body.innerHTML = `<tr><td colspan="3" class="empty-state">No ${_projectsTab} projects.</td></tr>`;
+        return;
+    }
+    body.innerHTML = filtered.map(p => `
+        <tr>
+            <td>${escapeHtml(p.title)}</td>
+            <td><span class="badge badge-${p.state}">${p.state}</span></td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div class="progress-bar" style="flex: 1;">
+                        <div class="progress-bar-fill" style="width: ${p.progress * 100}%"></div>
+                    </div>
+                    <span style="font-family: var(--mono); font-size: 0.8rem; color: var(--text-muted);">
+                        ${p.done_tasks}/${p.total_tasks}
+                    </span>
+                </div>
+            </td>
+        </tr>
+    `).join('');
 }
 
 function escapeHtml(text) {

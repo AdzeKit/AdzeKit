@@ -1,6 +1,6 @@
 [project]
 name = "adzekit"
-version = "0.1.0"
+version = "0.3.0"
 description = "A markdown-native, personal productivity workbench. Prehistoric tools. Modern brains."
 readme = "README.md"
 license = {text = "MIT"}

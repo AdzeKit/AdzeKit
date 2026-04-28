@@ -1,8 +1,8 @@
 # Inbox Zero Skill
 
 Reach inbox zero by classifying, acting on, and summarizing up to 100 inbox emails. Stars and
-labels REVIEW emails, outputs copy-paste-ready loops for ACTION emails, writes a triage report
-to `drafts/`, and updates the email patterns memory file.
+labels REVIEW emails, outputs copy-paste-ready loops for ACTION emails, and writes a triage report
+to `drafts/`.
 
 ## Prerequisites
 
@@ -20,8 +20,6 @@ using the `Write` tool.
 |------|------|
 | Active loops | `{SHED}/loops/active.md` |
 | Projects | `{SHED}/projects/*.md` (Glob, then Read each) |
-| Email patterns | `{SHED}/drafts/email-patterns.md` |
-| Daily note | `{SHED}/daily/YYYY-MM-DD.md` |
 | Draft output | `{SHED}/drafts/{filename}` (Write tool) |
 
 ## Gmail Access
@@ -54,19 +52,28 @@ Use Python scripts via Bash for batch operations (concurrent requests with urlli
 
 ### Step 1 — Load context
 
-Read all three in parallel using the Read tool:
-- `{SHED}/projects/*.md` — Glob to list, then Read each. Extract project slugs and titles.
-- `{SHED}/loops/active.md` — extract who/titles as active customer context
-- `{SHED}/drafts/email-patterns.md` — load known junk senders, notification sources, customer domains, notes
+Read all in parallel:
+- Glob `{SHED}/projects/*.md` (skip `archive/` and `backlog/` subdirs), then Read each active project file
+- Read `{SHED}/loops/active.md`
+
+**From project files**, build a CUSTOMER TABLE. For each project file, extract:
+- **slug** — from filename (e.g., `aer-compliance`)
+- **customer org** — from the title or Context section
+- **domain(s)** — scan Context and Log for `@domain.com` patterns; extract the external domain(s)
+- **key contacts** — names and emails mentioned in the Log
+- **Scott's role** — primary SA (To:) or supporting/CC-only — look for language like "Scott is CC only", "Scott appears CC only", or absence of Scott being directly named in customer-facing actions
+
+**From `loops/active.md`**, note which #slugs have open loops — these are hot accounts where email is more likely DIRECT.
 
 Build a working context block:
 ```
-CUSTOMER HINTS: <project slugs>
-OPEN LOOPS WITH: <who values from active loops>
-KNOWN JUNK: <senders from email-patterns.md>
-KNOWN NOTIFICATIONS: <senders from email-patterns.md>
-CUSTOMER DOMAINS: <domains from email-patterns.md>
-NOTES: <notes from email-patterns.md>
+CUSTOMER TABLE:
+| slug | org | domain(s) | contacts | Scott's role |
+|------|-----|-----------|----------|--------------|
+| aer-compliance | AER | aer.ca | Mouhannad Oweis, Harvinder Sohi | primary |
+...
+
+OPEN LOOPS (hot accounts): #aer-compliance, #otpp-vectorsearch, ...
 ```
 
 ### Step 2 — Fetch inbox
@@ -103,8 +110,8 @@ using `?format=full` and decode `payload.body.data` or `payload.parts[].body.dat
 
 ### Step 3 — Classify all emails
 
-For each email, assign exactly one category. Apply context from Step 1. Use the temporal check
-and grading rules below before assigning a final category.
+For each email, assign exactly one category. Cross-reference sender domain against the CUSTOMER
+TABLE built in Step 1. Apply temporal and grading rules below before assigning a final category.
 
 **Temporal check — apply first:**
 Before classifying, compare the email's Date header to today's date. If the email refers to a
@@ -127,19 +134,39 @@ specific event, meeting, deadline, or time-sensitive ask:
 **Grading rules (prevent over-escalation):**
 - Keyword signals ("urgent", "ASAP", "deadline", "today") only count if the email was sent **today**
   and the referenced deadline is **in the future**. Stale urgency keywords → ignore them.
-- Customer elevation (external domain + project hint) → minimum DIRECT, but NOT URGENT unless
-  there is also a clear active blocker or explicit escalation language.
+- **Customer domain match** (sender domain in CUSTOMER TABLE) → minimum DIRECT, but NOT URGENT
+  unless there is also a clear active blocker or explicit escalation language.
+  - EXCEPTION: if Scott's role for that project is CC-only, prefer CHATTER unless Scott is
+    explicitly addressed or in the To: field.
 - Calendar invites → always NOTIFICATION, regardless of sender. Never draft a reply to a calendar invite.
 - Meeting invites for **past meetings** → STALE, not DIRECT. Calendar noise → NOTIFICATION.
 - If genuinely unsure between URGENT and DIRECT, prefer DIRECT.
 - If genuinely unsure between DIRECT and CHATTER, prefer DIRECT only if user is in To (not just CC).
 - If genuinely unsure between REVIEW and CHATTER, prefer REVIEW only if genuinely novel and relevant.
 
+**Sender-specific elevation rules (baked in):**
+- `christopher.chalcraft@databricks.com` with Scott in To → DIRECT (AE who delegates ASQs)
+- `rob.signoretti@databricks.com` with AER/WCB customer content → DIRECT
+- `rowan.sciban@databricks.com` with NOVA customer content → DIRECT
+- `noreply@microsoft.com` (Teams) with customer name or project content in snippet → DIRECT
+- `equity.admin@databricks.com` → DIRECT (RSU/equity grant, action required)
+- `dse@camail.docusign.net` or any DocuSign sender → DIRECT (signature required)
+- `notifications@mail.morganstanleyatwork.com` with ACTION REQUIRED → DIRECT
+- `sfdc.user@databricks.com` where Scott is personally mentioned → DIRECT
+- `noreply.ca@mail.egencia.ca` → NOTIFICATION (booking confirmations)
+- `no-reply@greenhouse.io` → NOTIFICATION (STALE if event date is past)
+- `azure-noreply@microsoft.com` PAT expiry within 7 days → URGENT
+
 Process in batches of ~20 emails at a time for manageable context. Keep a running tally.
 
 ### Step 4 — Apply Gmail actions
 
-Cache label IDs from `GET $BASE/labels` first. Use batch operations where possible.
+Cache label IDs from `GET $BASE/labels` first. Known labels:
+- `Label_2` = AdzeKit/ActionRequired
+- `Label_3` = AdzeKit/Urgent
+- `Label_4` = AdzeKit/Review
+
+Use batch operations where possible.
 
 **JUNK, NOTIFICATION, and CHATTER:**
 ```bash
@@ -153,7 +180,7 @@ Combine into one modify call per message:
 ```bash
 curl -s -X POST "$BASE/messages/{id}/modify" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"addLabelIds":["STARRED","REVIEW_LABEL_ID"],"removeLabelIds":["INBOX"]}'
+  -d '{"addLabelIds":["STARRED","Label_4"],"removeLabelIds":["INBOX"]}'
 ```
 
 **STALE** — archive silently, no label, no draft:
@@ -162,12 +189,12 @@ curl -s -X POST "$BASE/messages/{id}/modify" \
 ```
 
 **DIRECT:**
-- Add ActionRequired label + archive: `{"addLabelIds":["LABEL_ID_ActionRequired"],"removeLabelIds":["INBOX"]}`
+- Add ActionRequired label + archive: `{"addLabelIds":["Label_2"],"removeLabelIds":["INBOX"]}`
 - Draft a reply **only if** the email contains a clear, specific ask. Skip for status updates,
   courtesy "let me know", FYIs with a soft ask, or anything that reading alone resolves.
 
 **URGENT:**
-- Add Urgent label, do NOT archive: `{"addLabelIds":["LABEL_ID_Urgent"]}`
+- Add Urgent label, do NOT archive: `{"addLabelIds":["Label_3"]}`
 - Draft a reply.
 
 **Draft reply creation** — build RFC 2822 message in Python:
@@ -250,16 +277,6 @@ Drafts created: N  ·  Emails starred: N  ·  Emails archived: N
 Actions: N processed · N archived · N labeled Urgent · N labeled ActionRequired · N starred for review · N drafts created
 Run: YYYY-MM-DD HH:MM
 ```
-
-### Step 6 — Update email patterns memory
-
-Use the `Edit` tool to append new patterns to `{SHED}/drafts/email-patterns.md`:
-- Add new junk senders under `## Known Junk Senders`
-- Add new notification sources under `## Known Notification Sources`
-- Add new customer domains under `## Customer Domains`
-- Add dated notes under `## Notes`
-
-Only add entries that aren't already in the file. Update the `Last updated:` line to today.
 
 ---
 
