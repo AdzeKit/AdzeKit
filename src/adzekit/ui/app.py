@@ -55,6 +55,12 @@ async def guide_page(request: Request):
     return templates.TemplateResponse(request, "guide.html", {"active_page": "guide"})
 
 
+@app.get("/graph", response_class=HTMLResponse)
+async def graph_page(request: Request):
+    """Knowledge graph browser."""
+    return templates.TemplateResponse(request, "graph.html", {"active_page": "graph"})
+
+
 # -- API endpoints -----------------------------------------------------------
 
 
@@ -153,6 +159,287 @@ async def api_agent_status():
     from adzekit.agent.isaac_client import check_isaac
 
     return {"isaac": check_isaac()}
+
+
+# -- Graph API --------------------------------------------------------------
+
+
+@app.get("/api/graph/stats")
+async def api_graph_stats():
+    """Stats from the built graph, plus the orphans list and top-connected nodes."""
+    from adzekit.modules.graph import graph_stats, load_graph
+
+    settings = _settings()
+    graph = load_graph(settings)
+    if graph is None:
+        return {"built": False}
+
+    stats = graph_stats(graph)
+
+    degree: dict[str, int] = {}
+    for rel in graph.relationships:
+        degree[rel.source] = degree.get(rel.source, 0) + 1
+        degree[rel.target] = degree.get(rel.target, 0) + 1
+    top = sorted(degree.items(), key=lambda x: -x[1])[:10]
+
+    connected = (
+        {r.source for r in graph.relationships}
+        | {r.target for r in graph.relationships}
+    )
+    orphans = sorted(n for n in graph.entities if n not in connected)
+
+    entities_by_type: dict[str, list[dict]] = {}
+    for e in graph.entities.values():
+        entities_by_type.setdefault(e.entity_type.value, []).append({
+            "name": e.name,
+            "sources": e.sources[:3],
+        })
+    for v in entities_by_type.values():
+        v.sort(key=lambda x: x["name"])
+
+    built_at = graph.built_at.isoformat() if graph.built_at else None
+    return {
+        "built": True,
+        "built_at": built_at,
+        "stats": stats,
+        "top_connected": [{"name": n, "degree": d} for n, d in top],
+        "orphans": orphans,
+        "entities_by_type": entities_by_type,
+    }
+
+
+@app.get("/api/graph/entities")
+async def api_graph_entities():
+    """Flat list of entity names (for editor wikilink autocomplete)."""
+    from adzekit.modules.graph import load_graph
+
+    graph = load_graph(_settings())
+    if graph is None:
+        return []
+    return sorted(graph.entities.keys())
+
+
+@app.get("/api/graph/entity/{name}")
+async def api_graph_entity(name: str, depth: int = 2):
+    """Compressed graph context for a single entity."""
+    from adzekit.modules.graph import get_context, load_graph
+
+    graph = load_graph(_settings())
+    if graph is None:
+        raise HTTPException(status_code=404, detail="Graph not built. Run: adzekit graph build")
+    return {
+        "name": name,
+        "depth": depth,
+        "context": get_context(name, graph, depth=depth),
+    }
+
+
+@app.get("/api/graph/network")
+async def api_graph_network():
+    """Cytoscape-shaped graph: {nodes: [...], edges: [...]} for the visualizer.
+
+    Each node carries entity_type, degree, and source files. Each edge carries
+    its relation_type so the client can colour and filter."""
+    from adzekit.modules.graph import load_graph
+
+    graph = load_graph(_settings())
+    if graph is None:
+        return {"built": False, "nodes": [], "edges": []}
+
+    degree: dict[str, int] = {}
+    for rel in graph.relationships:
+        degree[rel.source] = degree.get(rel.source, 0) + 1
+        degree[rel.target] = degree.get(rel.target, 0) + 1
+
+    nodes = []
+    for entity in graph.entities.values():
+        nodes.append({
+            "data": {
+                "id": entity.name,
+                "label": entity.name,
+                "entity_type": entity.entity_type.value,
+                "degree": degree.get(entity.name, 0),
+                "sources": entity.sources[:5],
+            }
+        })
+
+    edges = []
+    seen: set[tuple[str, str, str]] = set()
+    for i, rel in enumerate(graph.relationships):
+        key = (rel.source, rel.target, rel.relation_type.value)
+        if key in seen:
+            continue
+        seen.add(key)
+        # Drop self-loops — they're noise on the canvas.
+        if rel.source == rel.target:
+            continue
+        # Skip edges referencing entities that aren't in the registry.
+        if rel.source not in graph.entities or rel.target not in graph.entities:
+            continue
+        edges.append({
+            "data": {
+                "id": f"e{i}",
+                "source": rel.source,
+                "target": rel.target,
+                "relation": rel.relation_type.value,
+            }
+        })
+
+    return {
+        "built": True,
+        "built_at": graph.built_at.isoformat() if graph.built_at else None,
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+@app.get("/api/graph/duplicates")
+async def api_graph_duplicates(threshold: float = 0.85):
+    """Deterministic duplicate clusters across the graph. No LLM."""
+    from adzekit.modules.graph import load_graph
+    from adzekit.modules.graph_dedup import find_duplicates
+
+    graph = load_graph(_settings())
+    if graph is None:
+        return {"built": False, "groups": []}
+
+    groups = find_duplicates(graph, threshold=threshold)
+    return {
+        "built": True,
+        "threshold": threshold,
+        "groups": [
+            {
+                "entity_type": g.entity_type,
+                "members": [
+                    {"name": m.name, "degree": m.degree, "sources": m.sources}
+                    for m in g.members
+                ],
+                "similarity": round(g.similarity, 3),
+                "suggested_canonical": g.suggested_canonical,
+            }
+            for g in groups
+        ],
+    }
+
+
+@app.post("/api/graph/duplicates/merge")
+async def api_graph_dedup_merge(request: Request):
+    """Apply find-and-replace merges across the backbone.
+
+    Body: {merges: [{from, to}, ...], dry_run: bool}
+    Returns per-file replacement counts. Rebuilds the graph after a real
+    (non-dry-run) merge so the UI immediately reflects the consolidated state.
+    """
+    from adzekit.modules.graph import build_graph, save_graph
+    from adzekit.modules.graph_dedup import apply_merges
+
+    body = await request.json()
+    raw = body.get("merges", []) or []
+    merges = [
+        (m.get("from", "").strip(), m.get("to", "").strip())
+        for m in raw
+        if m.get("from") and m.get("to")
+    ]
+    if not merges:
+        raise HTTPException(status_code=400, detail="No merges specified")
+
+    settings = _settings()
+    dry_run = bool(body.get("dry_run", False))
+
+    result = await asyncio.to_thread(apply_merges, merges, settings, dry_run)
+
+    if not dry_run and result["total_replacements"] > 0:
+        try:
+            graph = await asyncio.to_thread(build_graph, settings)
+            await asyncio.to_thread(save_graph, graph, settings)
+        except Exception:
+            pass
+
+    return result
+
+
+@app.post("/api/graph/build")
+async def api_graph_build():
+    """Synchronously rebuild the graph from current backbone."""
+    from adzekit.modules.graph import build_graph, graph_stats, save_graph
+
+    settings = _settings()
+    graph = await asyncio.to_thread(build_graph, settings)
+    await asyncio.to_thread(save_graph, graph, settings)
+    return {"status": "built", "stats": graph_stats(graph)}
+
+
+# -- Triage API -------------------------------------------------------------
+
+
+@app.get("/api/triage")
+async def api_triage():
+    """Items requiring decisions: overdue loops, stale active projects, stale bench items."""
+    from datetime import date
+
+    from adzekit.modules.bench import stale_bench_items
+    from adzekit.modules.wip import stale_active_projects
+    from adzekit.preprocessor import load_active_loops
+
+    settings = _settings()
+    today = date.today()
+
+    loops = load_active_loops(settings)
+    overdue = [
+        {
+            "title": loop.title,
+            "due": loop.due.isoformat() if loop.due else None,
+            "days_overdue": (today - loop.due).days if loop.due else None,
+            "size": loop.size,
+            "who": loop.who,
+        }
+        for loop in loops
+        if loop.due and loop.due < today and loop.status.lower() != "closed"
+    ]
+
+    stale = [
+        {"slug": p.slug, "title": p.title, "days_inactive": days}
+        for p, days in stale_active_projects(settings)
+    ]
+
+    bench_stale = stale_bench_items(settings)
+
+    return {
+        "overdue_loops": overdue,
+        "stale_projects": stale,
+        "stale_bench_items": bench_stale,
+    }
+
+
+# -- Demote / promote API ---------------------------------------------------
+
+
+@app.post("/api/files/projects/{slug}/demote")
+async def api_demote_project(slug: str):
+    """Move an active project back to backlog."""
+    from adzekit.modules.wip import demote_project
+
+    settings = _settings()
+    try:
+        path = demote_project(slug, settings=settings)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"status": "demoted", "path": str(path.relative_to(settings.projects_dir))}
+
+
+@app.post("/api/files/projects/{slug}/promote")
+async def api_promote_project(slug: str):
+    """Move a backlog project to active. Hard-blocked at WIP cap."""
+    from adzekit.modules.wip import activate_project
+
+    settings = _settings()
+    try:
+        path = activate_project(slug, settings=settings)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"status": "promoted", "path": str(path.relative_to(settings.projects_dir))}
 
 
 def _sessions_dir() -> Path:
@@ -491,7 +778,7 @@ async def api_read_file(section: str, name: str):
 
 @app.put("/api/files/{section}/{name:path}")
 async def api_write_file(section: str, name: str, request: Request):
-    """Save content to a backbone file."""
+    """Save content to a backbone file. Triggers an async graph rebuild."""
     _validate_section(section)
     settings = _settings()
     path = _resolve_file(section, name, settings)
@@ -505,7 +792,48 @@ async def api_write_file(section: str, name: str, request: Request):
         raise HTTPException(status_code=400, detail="Missing 'content' field")
 
     path.write_text(content, encoding="utf-8")
+
+    if section in ("daily", "loops", "projects", "knowledge"):
+        _schedule_graph_rebuild(settings)
+
     return {"status": "saved", "path": name}
+
+
+# -- Graph rebuild (debounced background task) ------------------------------
+
+import asyncio  # noqa: E402
+
+_graph_rebuild_task: asyncio.Task | None = None
+_graph_rebuild_lock = asyncio.Lock()
+_GRAPH_DEBOUNCE_SECONDS = 2.0
+
+
+def _schedule_graph_rebuild(settings: Settings) -> None:
+    """Debounced background graph rebuild. Multiple saves within the debounce
+    window collapse into a single rebuild. Failures are silent — graph build
+    must never break a save."""
+    global _graph_rebuild_task
+    if _graph_rebuild_task and not _graph_rebuild_task.done():
+        _graph_rebuild_task.cancel()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _graph_rebuild_task = loop.create_task(_debounced_graph_rebuild(settings))
+
+
+async def _debounced_graph_rebuild(settings: Settings) -> None:
+    try:
+        await asyncio.sleep(_GRAPH_DEBOUNCE_SECONDS)
+    except asyncio.CancelledError:
+        return
+    async with _graph_rebuild_lock:
+        try:
+            from adzekit.modules.graph import build_graph, save_graph
+            graph = await asyncio.to_thread(build_graph, settings)
+            await asyncio.to_thread(save_graph, graph, settings)
+        except Exception:
+            pass
 
 
 # -- File API: create -------------------------------------------------------
@@ -580,6 +908,12 @@ async def api_create_project(request: Request):
         )
     if state not in ("active", "backlog"):
         raise HTTPException(status_code=400, detail="State must be 'active' or 'backlog'")
+
+    if state == "active":
+        from adzekit.modules.wip import can_activate
+        allowed, reason = can_activate(settings)
+        if not allowed:
+            raise HTTPException(status_code=409, detail=reason)
 
     path = create_project(
         slug=slug,

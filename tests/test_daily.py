@@ -81,8 +81,11 @@ class TestDailyStart:
 
         path, _ = daily_start(settings=workspace)
         content = path.read_text()
-        task_count = content.count("- [ ]")
-        assert task_count <= 5
+        # Count `- [ ]` only inside the Morning: Intention section. The new
+        # Triage block can also contain unchecked items (one per overdue loop)
+        # but the WIP cap of 5 applies only to the day's intentions.
+        morning = content.split("## Morning: Intention", 1)[1].split("## Log", 1)[0]
+        assert morning.count("- [ ]") <= 5
 
     def test_has_section_headers(self, workspace):
         path, _ = daily_start(settings=workspace)

@@ -360,15 +360,69 @@ def cmd_tags(args: argparse.Namespace) -> None:
 
 def cmd_project(args: argparse.Namespace) -> None:
     """Create a new project file from the backbone template."""
+    import sys
+
+    from adzekit.modules.wip import can_activate
     from adzekit.workspace import create_project
 
     settings = _resolve_settings(args)
+
+    if args.active:
+        allowed, reason = can_activate(settings)
+        if not allowed:
+            from adzekit.modules.git_age import project_ages
+            ages = [a for a in project_ages(settings)
+                    if a.path.parent == settings.active_dir]
+            stalest = ages[0] if ages else None
+            print(f"Error: {reason}", file=sys.stderr)
+            if stalest is not None:
+                print(
+                    f"Most stale active project: {stalest.path.stem} "
+                    f"({stalest.stale_days}d). "
+                    f"Try: adzekit demote {stalest.path.stem}",
+                    file=sys.stderr,
+                )
+            raise SystemExit(1)
+
     path = create_project(
         slug=args.slug,
         title=args.title or "",
         backlog=not args.active,
         settings=settings,
     )
+    print(path)
+
+
+def cmd_demote(args: argparse.Namespace) -> None:
+    """Move an active project back to backlog/."""
+    import sys
+
+    from adzekit.modules.wip import demote_project
+
+    settings = _resolve_settings(args)
+    try:
+        path = demote_project(args.slug, settings=settings)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    print(path)
+
+
+def cmd_promote(args: argparse.Namespace) -> None:
+    """Move a backlog project to active/ (hard-blocked at WIP cap)."""
+    import sys
+
+    from adzekit.modules.wip import activate_project
+
+    settings = _resolve_settings(args)
+    try:
+        path = activate_project(args.slug, settings=settings)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     print(path)
 
 
@@ -793,6 +847,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create in active/ instead of backlog/.",
     )
     p_project.set_defaults(func=cmd_project)
+
+    # demote
+    p_demote = sub.add_parser(
+        "demote", help="Move an active project back to backlog/.",
+    )
+    p_demote.add_argument("slug", help="Project slug.")
+    p_demote.set_defaults(func=cmd_demote)
+
+    # promote
+    p_promote = sub.add_parser(
+        "promote",
+        help="Move a backlog project to active/ (blocks at WIP cap).",
+    )
+    p_promote.add_argument("slug", help="Project slug.")
+    p_promote.set_defaults(func=cmd_promote)
 
     # status
     p_status = sub.add_parser("status", help="Show shed health summary.")

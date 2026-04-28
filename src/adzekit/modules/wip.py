@@ -92,6 +92,62 @@ def archive_project(project_slug: str, settings: Settings | None = None) -> Path
     return dst
 
 
+def demote_project(project_slug: str, settings: Settings | None = None) -> Path:
+    """Move a project from active/ back to backlog/.
+
+    Returns the new project file path.
+    """
+    settings = settings or get_settings()
+    src = settings.active_dir / f"{project_slug}.md"
+    if not src.exists():
+        raise FileNotFoundError(f"Project '{project_slug}' not found in active/.")
+    settings.backlog_dir.mkdir(parents=True, exist_ok=True)
+    dst = settings.backlog_dir / f"{project_slug}.md"
+    src.rename(dst)
+    return dst
+
+
+def stale_active_projects(
+    settings: Settings | None = None,
+    days: int | None = None,
+) -> list[tuple]:
+    """Return active projects whose markdown file hasn't been modified in N days.
+
+    Uses git history (via git_age) when available, falling back to the file's
+    mtime. Returns a list of (Project, days_inactive) tuples, oldest first.
+    """
+    from datetime import date as _date
+
+    from adzekit.modules.git_age import file_age
+    from adzekit.preprocessor import load_projects
+
+    settings = settings or get_settings()
+    threshold = days if days is not None else settings.stale_loop_days
+
+    today = _date.today()
+    results: list[tuple] = []
+
+    for proj in load_projects(ProjectState.ACTIVE, settings):
+        path = settings.active_dir / f"{proj.slug}.md"
+        age = file_age(path, settings)
+        # Prefer git-modified date; fall back to filesystem mtime.
+        if age.modified is not None:
+            inactive = (today - age.modified).days
+        else:
+            try:
+                from datetime import datetime
+                mtime = datetime.fromtimestamp(path.stat().st_mtime).date()
+                inactive = (today - mtime).days
+            except OSError:
+                continue
+
+        if inactive >= threshold:
+            results.append((proj, inactive))
+
+    results.sort(key=lambda x: -x[1])
+    return results
+
+
 def wip_status(settings: Settings | None = None) -> dict:
     """Return a summary of current WIP state."""
     settings = settings or get_settings()

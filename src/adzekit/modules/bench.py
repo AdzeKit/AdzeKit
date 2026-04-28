@@ -19,8 +19,6 @@ from pathlib import Path
 
 from adzekit.config import Settings, get_settings
 
-SKIP_FILES = {"email-patterns.md"}
-
 PENDING_RE = re.compile(r"^\- \[[ x]\] .+\((.+?)\)\s*$")
 
 
@@ -96,11 +94,48 @@ def _list_draft_files(settings: Settings) -> list[Path]:
     if not drafts.exists():
         return []
     return sorted(
-        (f for f in drafts.iterdir()
-         if f.is_file() and f.suffix == ".md" and f.name not in SKIP_FILES),
+        (f for f in drafts.iterdir() if f.is_file() and f.suffix == ".md"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
+
+
+_BENCH_TS_RE = re.compile(r"^- \[ \] \[(\d{4}-\d{2}-\d{2})(?: \d{2}:\d{2})?\] (.+?)(?:\s*\([^)]+\))?$")
+
+
+def stale_bench_items(
+    settings: Settings | None = None,
+    days: int | None = None,
+) -> list[dict]:
+    """Return open ('- [ ]') bench items older than N days.
+
+    Each item is a {"text": ..., "date": "YYYY-MM-DD", "days": int} dict, oldest first.
+    """
+    from datetime import date as _date
+
+    settings = settings or get_settings()
+    threshold = days if days is not None else settings.stale_loop_days
+    bench = settings.bench_path
+    if not bench.exists():
+        return []
+
+    today = _date.today()
+    results: list[dict] = []
+
+    for line in bench.read_text(encoding="utf-8").splitlines():
+        m = _BENCH_TS_RE.match(line.strip())
+        if not m:
+            continue
+        try:
+            d = _date.fromisoformat(m.group(1))
+        except ValueError:
+            continue
+        age = (today - d).days
+        if age >= threshold:
+            results.append({"text": m.group(2).strip(), "date": d.isoformat(), "days": age})
+
+    results.sort(key=lambda x: -x["days"])
+    return results
 
 
 def cull(settings: Settings | None = None) -> tuple[int, int]:
