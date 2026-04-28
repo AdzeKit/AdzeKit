@@ -154,6 +154,9 @@ def build_graph(settings: Settings) -> KnowledgeGraph:
     _extract_projects(graph, settings, shed)
     _extract_person_tags(graph, settings, shed)
     _extract_loops(graph, settings)
+    # Run prose extraction last so the entity registry is fully populated
+    # before we scan free-form text for mentions of registered entities.
+    _extract_prose_mentions(graph, settings, shed)
 
     return graph
 
@@ -217,12 +220,30 @@ def _extract_projects(
 
             for m in _TAG.finditer(content):
                 tag = m.group(1).lower()
+                if tag == slug:
+                    continue  # self-tag (project file references its own slug)
                 if _PERSON_TAG.match(tag):
                     _ensure_entity(graph, tag, EntityType.PERSON)
                     graph.relationships.append(Relationship(
                         source=slug,
                         target=tag,
                         relation_type=RelationType.MENTIONED_IN,
+                        source_file=rel_path,
+                    ))
+
+            # Typed relationship headers in project files (**uses:**, **part-of:**, etc.)
+            for rel in _extract_typed_rels(content, slug, rel_path):
+                _ensure_entity(graph, rel.target, EntityType.CONCEPT)
+                graph.relationships.append(rel)
+
+            # [[WikiLinks]] in project files → relates-to
+            for target in _extract_wikilink_targets(content):
+                if target and target != slug:
+                    _ensure_entity(graph, target, EntityType.CONCEPT)
+                    graph.relationships.append(Relationship(
+                        source=slug,
+                        target=target,
+                        relation_type=RelationType.RELATES_TO,
                         source_file=rel_path,
                     ))
 
@@ -246,6 +267,87 @@ def _extract_person_tags(
                 tag = m.group(1).lower()
                 if _PERSON_TAG.match(tag):
                     _add_entity(graph, tag, EntityType.PERSON, rel_path)
+
+
+def _extract_prose_mentions(
+    graph: KnowledgeGraph,
+    settings: Settings,
+    shed: Path,
+) -> None:
+    """Find prose mentions of known concept/project/tool/org entities and add
+    ``mentioned-in`` edges.
+
+    Why: external processes (e.g. the Slack ingestion skill) append rich text
+    to knowledge notes without using ``[[wikilinks]]`` or typed headers. That
+    content references Lakebase, MLflow, MCP, etc. in plain prose — invisible
+    to the typed-relationship and wikilink extractors. This pass closes the
+    gap by case-insensitive whole-word matching against the registry.
+
+    Constraints (to avoid false positives):
+    - Only matches against entities of type ``concept``, ``project``, ``tool``,
+      ``organization`` — skips ``person`` and ``loop``.
+    - Slugs shorter than 4 characters are skipped.
+    - Matches are deduplicated against existing relationships.
+    - Self-mentions (a knowledge note matching its own slug) are skipped.
+    - Only knowledge/ and projects/ files are scanned — files with a clear
+      ``source`` entity (the file's own slug). Daily/reviews don't have a
+      single owning entity so we skip them here.
+    """
+    # Build a lookup: slug → compiled regex. Hyphens in slugs match either a
+    # space or a hyphen in prose, so "knowledge-assistant" finds "Knowledge
+    # Assistant" or "knowledge-assistant".
+    candidates: dict[str, re.Pattern[str]] = {}
+    for entity in graph.entities.values():
+        if entity.entity_type.value not in ("concept", "project", "tool", "organization"):
+            continue
+        if len(entity.name) < 4:
+            continue
+        words = entity.name.split("-")
+        if len(words) == 1:
+            pat = re.compile(rf"\b{re.escape(words[0])}\b", re.IGNORECASE)
+        else:
+            sep = r"[\s\-]+"
+            pat = re.compile(rf"\b{sep.join(re.escape(w) for w in words)}\b", re.IGNORECASE)
+        candidates[entity.name] = pat
+
+    if not candidates:
+        return
+
+    # Dedupe on (source, target) regardless of relation type. If a structured
+    # extractor already linked these two entities (uses / part-of / relates-to /
+    # wikilink → relates-to), don't add a redundant mentioned-in edge from
+    # prose. The prose pass only fires when nothing structural saw the link.
+    existing_pairs: set[tuple[str, str]] = {
+        (r.source, r.target) for r in graph.relationships
+    }
+
+    scan_dirs = [settings.knowledge_dir, settings.projects_dir]
+    for d in scan_dirs:
+        if not d.exists():
+            continue
+        for path in sorted(d.rglob("*.md")):
+            if not path.is_file():
+                continue
+            source_slug = path.stem
+            try:
+                content = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            rel_path = str(path.relative_to(shed))
+
+            for target, pat in candidates.items():
+                if target == source_slug:
+                    continue
+                if (source_slug, target) in existing_pairs:
+                    continue
+                if pat.search(content):
+                    graph.relationships.append(Relationship(
+                        source=source_slug,
+                        target=target,
+                        relation_type=RelationType.MENTIONED_IN,
+                        source_file=rel_path,
+                    ))
+                    existing_pairs.add((source_slug, target))
 
 
 def _extract_loops(graph: KnowledgeGraph, settings: Settings) -> None:

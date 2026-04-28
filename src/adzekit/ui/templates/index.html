@@ -3,6 +3,46 @@
 
 {% block head %}
 <style>
+    .triage-card {
+        border: 1px solid var(--red);
+        background: rgba(239, 83, 80, 0.06);
+    }
+    .triage-card h3 { color: var(--red); }
+    .triage-section { margin-bottom: 0.75rem; }
+    .triage-section:last-child { margin-bottom: 0; }
+    .triage-section .label {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.3rem;
+    }
+    .triage-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.3rem 0;
+        font-size: 0.9rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .triage-row:last-child { border-bottom: none; }
+    .triage-row .age {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--red);
+    }
+    .demote-btn {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        padding: 0.15rem 0.45rem;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .demote-btn:hover { color: var(--orange); border-color: var(--orange); }
     .tabs {
         display: flex;
         gap: 0.25rem;
@@ -39,6 +79,8 @@
 {% block content %}
 <h1>// dashboard</h1>
 
+<div id="triage-container"></div>
+
 <div class="grid" id="stats-grid">
     <div class="card">
         <h3>Active Projects</h3>
@@ -54,6 +96,11 @@
         <h3>Daily Tasks</h3>
         <div class="stat" id="stat-tasks">--</div>
         <div class="stat-label" id="stat-tasks-label">loading...</div>
+    </div>
+    <div class="card">
+        <h3>Graph</h3>
+        <div class="stat" id="stat-graph">--</div>
+        <div class="stat-label" id="stat-graph-label">entities</div>
     </div>
 </div>
 
@@ -100,21 +147,33 @@
 <script>
 async function loadDashboard() {
     try {
-        const [statusRes, loopsRes, projectsRes] = await Promise.all([
+        const [statusRes, loopsRes, projectsRes, triageRes, graphRes] = await Promise.all([
             fetch('/api/status'),
             fetch('/api/loops'),
             fetch('/api/projects'),
+            fetch('/api/triage'),
+            fetch('/api/graph/stats'),
         ]);
 
         const status = await statusRes.json();
         const loops = await loopsRes.json();
         const projects = await projectsRes.json();
+        const triage = await triageRes.json();
+        const graph = await graphRes.json();
+
+        renderTriage(triage);
+        renderGraphCard(graph);
 
         // Stats
         const projEl = document.getElementById('stat-projects');
         projEl.textContent = `${status.active_projects}/${status.max_active_projects}`;
-        projEl.className = 'stat ' + (status.active_projects >= status.max_active_projects ? 'warn' : 'ok');
-        document.getElementById('stat-projects-label').textContent = 'active / max';
+        let projCls = 'ok';
+        if (status.active_projects > status.max_active_projects) projCls = 'danger';
+        else if (status.active_projects >= status.max_active_projects) projCls = 'warn';
+        projEl.className = 'stat ' + projCls;
+        const overBy = status.active_projects - status.max_active_projects;
+        document.getElementById('stat-projects-label').textContent =
+            overBy > 0 ? `OVER CAP — demote ${overBy}` : 'active / max';
 
         const loopEl = document.getElementById('stat-loops');
         loopEl.textContent = status.open_loops;
@@ -172,9 +231,13 @@ function renderProjects() {
         body.innerHTML = `<tr><td colspan="3" class="empty-state">No ${_projectsTab} projects.</td></tr>`;
         return;
     }
-    body.innerHTML = filtered.map(p => `
+    body.innerHTML = filtered.map(p => {
+        const action = p.state === 'active'
+            ? `<button class="demote-btn" onclick="demoteProject('${escapeHtml(p.slug)}')" title="Move to backlog">demote</button>`
+            : '';
+        return `
         <tr>
-            <td>${escapeHtml(p.title)}</td>
+            <td>${escapeHtml(p.title)} ${action}</td>
             <td><span class="badge badge-${p.state}">${p.state}</span></td>
             <td>
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -186,8 +249,86 @@ function renderProjects() {
                     </span>
                 </div>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
+}
+
+async function demoteProject(slug) {
+    if (!confirm(`Demote ${slug} to backlog?`)) return;
+    const res = await fetch(`/api/files/projects/${encodeURIComponent(slug)}/demote`, { method: 'POST' });
+    if (!res.ok) {
+        const err = await res.json();
+        alert(`Demote failed: ${err.detail || res.status}`);
+        return;
+    }
+    loadDashboard();
+}
+
+function renderTriage(triage) {
+    const container = document.getElementById('triage-container');
+    const overdue = triage.overdue_loops || [];
+    const stale = triage.stale_projects || [];
+    const benchStale = triage.stale_bench_items || [];
+    if (overdue.length === 0 && stale.length === 0 && benchStale.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    let html = '<div class="card triage-card" style="margin-bottom: 1.5rem;"><h3>Triage required</h3>';
+    if (overdue.length) {
+        html += '<div class="triage-section"><div class="label">Overdue loops</div>';
+        html += overdue.map(o => `
+            <div class="triage-row">
+                <span>${escapeHtml(o.title)}</span>
+                <span class="age">${o.days_overdue}d</span>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+    if (stale.length) {
+        html += '<div class="triage-section"><div class="label">Stale active projects</div>';
+        html += stale.map(s => `
+            <div class="triage-row">
+                <span>${escapeHtml(s.title || s.slug)}</span>
+                <span style="display:flex;gap:0.5rem;align-items:center">
+                    <span class="age">${s.days_inactive}d</span>
+                    <button class="demote-btn" onclick="demoteProject('${escapeHtml(s.slug)}')">demote</button>
+                </span>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+    if (benchStale.length) {
+        html += '<div class="triage-section"><div class="label">Stale bench items</div>';
+        html += benchStale.slice(0, 8).map(b => `
+            <div class="triage-row">
+                <span>${escapeHtml(b.text)}</span>
+                <span class="age">${b.days}d</span>
+            </div>
+        `).join('');
+        if (benchStale.length > 8) {
+            html += `<div class="triage-row" style="color:var(--text-muted);font-size:0.8rem">…and ${benchStale.length - 8} more</div>`;
+        }
+        html += '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderGraphCard(graph) {
+    const stat = document.getElementById('stat-graph');
+    const label = document.getElementById('stat-graph-label');
+    if (!graph.built) {
+        stat.textContent = '0';
+        stat.className = 'stat warn';
+        label.textContent = 'not built';
+        return;
+    }
+    stat.textContent = graph.stats.total_entities;
+    const orphans = (graph.orphans || []).length;
+    if (orphans === 0) stat.className = 'stat ok';
+    else if (orphans > 5) stat.className = 'stat danger';
+    else stat.className = 'stat warn';
+    label.textContent = `${orphans} orphan${orphans === 1 ? '' : 's'}`;
 }
 
 function escapeHtml(text) {

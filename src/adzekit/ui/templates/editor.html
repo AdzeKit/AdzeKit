@@ -595,12 +595,14 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ---- Tag autocomplete -------------------------------------------------------
+// ---- Tag + WikiLink autocomplete -------------------------------------------
 
 let _allTags = null;
+let _allEntities = null;
 let _acHashPos = -1;
 let _acSelectedIndex = -1;
 let _acFiltered = [];
+let _acMode = 'tag'; // 'tag' or 'wiki'
 const acEl = document.getElementById('tag-autocomplete');
 
 async function _fetchTags() {
@@ -614,11 +616,27 @@ async function _fetchTags() {
     return _allTags;
 }
 
+async function _fetchEntities() {
+    if (_allEntities !== null) return _allEntities;
+    try {
+        const res = await fetch('/api/graph/entities');
+        _allEntities = await res.json();
+    } catch (_) {
+        _allEntities = [];
+    }
+    return _allEntities;
+}
+
 function _getTagQuery() {
     const pos = editorEl.selectionStart;
     const before = editorEl.value.substring(0, pos);
-    const m = before.match(/#([a-zA-Z0-9_-]*)$/);
-    return m ? { query: m[1], hashStart: pos - m[0].length } : null;
+    // WikiLink: [[partial...
+    const wm = before.match(/\[\[([^\]\n]*)$/);
+    if (wm) return { query: wm[1], hashStart: pos - wm[0].length, mode: 'wiki' };
+    // Tag: #partial
+    const tm = before.match(/#([a-zA-Z0-9_-]*)$/);
+    if (tm) return { query: tm[1], hashStart: pos - tm[0].length, mode: 'tag' };
+    return null;
 }
 
 function _positionDropdown() {
@@ -647,9 +665,11 @@ function _positionDropdown() {
 }
 
 function _renderDropdown() {
+    const prefix = _acMode === 'wiki' ? '[[' : '#';
+    const suffix = _acMode === 'wiki' ? ']]' : '';
     acEl.innerHTML = _acFiltered.map((t, i) =>
         `<div class="tag-item${i === _acSelectedIndex ? ' selected' : ''}"
-              data-index="${i}">#${escapeHtml(t)}</div>`
+              data-index="${i}">${prefix}${escapeHtml(t)}${suffix}</div>`
     ).join('');
     acEl.style.display = 'block';
     _positionDropdown();
@@ -668,9 +688,16 @@ function _selectTag(index) {
     const curPos = editorEl.selectionStart;
     const before = editorEl.value.substring(0, _acHashPos);
     const after = editorEl.value.substring(curPos);
-    editorEl.value = before + '#' + tag + after;
-    const newPos = _acHashPos + tag.length + 1;
-    editorEl.selectionStart = editorEl.selectionEnd = newPos;
+    let inserted, caretOffset;
+    if (_acMode === 'wiki') {
+        inserted = '[[' + tag + ']]';
+        caretOffset = inserted.length; // place caret after closing brackets
+    } else {
+        inserted = '#' + tag;
+        caretOffset = inserted.length;
+    }
+    editorEl.value = before + inserted + after;
+    editorEl.selectionStart = editorEl.selectionEnd = _acHashPos + caretOffset;
     _hideDropdown();
     editorEl.dispatchEvent(new Event('input'));
 }
@@ -702,9 +729,12 @@ editorEl.addEventListener('input', async () => {
     if (!q) { _hideDropdown(); return; }
 
     _acHashPos = q.hashStart;
-    const tags = await _fetchTags();
+    _acMode = q.mode;
+    const candidates = q.mode === 'wiki' ? await _fetchEntities() : await _fetchTags();
     const lower = q.query.toLowerCase();
-    _acFiltered = tags.filter(t => t.toLowerCase().startsWith(lower)).slice(0, 12);
+    _acFiltered = candidates
+        .filter(t => t.toLowerCase().includes(lower))
+        .slice(0, 12);
     if (_acFiltered.length === 0) { _hideDropdown(); return; }
     _acSelectedIndex = 0;
     _renderDropdown();

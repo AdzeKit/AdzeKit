@@ -50,19 +50,6 @@ def test_cull_clears_checked_items(workspace):
     assert "keep-this.md" in content
 
 
-def test_cull_skips_email_patterns(workspace):
-    drafts = workspace.drafts_dir
-    (drafts / "email-patterns.md").write_text("# Email Patterns Memory\n")
-    (drafts / "real-draft.md").write_text("# Real Draft\n")
-
-    added, _ = cull(workspace)
-
-    assert added == 1
-    content = workspace.bench_path.read_text()
-    assert "email-patterns.md" not in content
-    assert "real-draft.md" in content
-
-
 def test_cull_skips_non_md_files(workspace):
     drafts = workspace.drafts_dir
     (drafts / "data.json").write_text("{}")

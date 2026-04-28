@@ -1,8 +1,8 @@
-# Daily Start Skill
+# Daily Start
 
-Generate today's daily note pre-populated with real context: yesterday's carried intentions,
-loops due today or overdue, and a proposed set of 3-5 focus tasks for the day. Removes the
-blank-page problem at the start of each morning.
+Generate today's daily note pre-populated with real context: yesterday's carried focus,
+loops due today or overdue, and a proposed focus line. Also surfaces stale drafts so
+nothing festers in the processing queue.
 
 Output goes to `drafts/daily-YYYY-MM-DD.md` for human review. The human then moves it into
 `daily/YYYY-MM-DD.md`. Never writes directly to `daily/`. Human always decides.
@@ -19,11 +19,27 @@ All reads use the `Read` tool directly on shed files. Writes use `Write` to `{SH
 | Yesterday's note | `{SHED}/daily/YYYY-MM-DD.md` (previous day) |
 | Active loops | `{SHED}/loops/active.md` |
 | Projects | `{SHED}/projects/*.md` (Glob, then Read each) |
+| Stale drafts | `{SHED}/drafts/*.md` (Glob for age check) |
 | Draft output | `{SHED}/drafts/daily-YYYY-MM-DD.md` (Write tool) |
 
 ---
 
 ## Workflow
+
+### Step 0 — Run inbox-zero first
+
+Invoke the inbox-zero skill (`{SHED}/skills/inbox-zero.md`) and let it complete fully before
+moving on. inbox-zero processes up to 100 inbox emails, archives noise, stars REVIEW items, and
+writes a triage report + DIRECT loop lines into `drafts/`. Daily-start then picks up those
+fresh loop lines as carried context in the steps below.
+
+Keep going across passes if the inbox isn't empty after one batch — inbox-zero is safe to run
+repeatedly until the inbox reaches zero or until 5 passes have run (whichever comes first), to
+bound runtime.
+
+If gcloud auth or the Gmail API is unavailable (e.g., running in a remote environment without
+Gmail credentials), skip Step 0, print a one-line note, and continue with the rest of the
+workflow.
 
 ### Step 1 — Load today's context
 
@@ -39,7 +55,7 @@ Compute overdue (due date < today), due-today (due date = today), and upcoming c
 
 **If today's note already exists**: print a message and stop:
 ```
-Today's note already exists at daily/YYYY-MM-DD.md. Use `adzekit today` to open it.
+Today's note already exists at daily/YYYY-MM-DD.md.
 ```
 
 ### Step 2 — Load yesterday's note
@@ -47,28 +63,35 @@ Today's note already exists at daily/YYYY-MM-DD.md. Use `adzekit today` to open 
 Compute yesterday's date. Read `{SHED}/daily/{yesterday}.md`.
 
 Extract from yesterday:
-- **Carried intentions**: `[ ]` (undone) tasks from `## Morning: Intention`
-- **Tomorrow items**: text from `## Evening: Reflection` → `**Tomorrow:**` section
-- **Blocked items**: text from `## Evening: Reflection` → `**Blocked:**` section
+- **Tomorrow line**: text after `> End:` → look for `Tomorrow:` content
+- **Unchecked items**: any `- [ ]` lines (carried intentions)
+- **Focus line**: text after `> Focus:` (for pattern reference)
 
 If yesterday's note doesn't exist (weekend, travel), try the day before. Go back up to 3 days.
 
-### Step 3 — Compose the proposed intentions
+### Step 3 — Compose the focus line and task list
 
-Build a ranked, de-duplicated list of proposed focus tasks from:
+Build the `> Focus:` line from the highest-priority source:
+
+1. **Yesterday's Tomorrow items** (if any) — use the first one as focus
+2. **Overdue loop** (if any) — use the most overdue as focus
+3. **Due-today loop** (if any) — use as focus
+4. If nothing: leave blank for human to fill
+
+Build a ranked task list (max 5 items):
 
 **Source 1 — Loops due today or overdue** (highest priority):
 - All due-today loops: `- [ ] ({size}) [{due_date}] {title}  <- due today`
 - Up to 2 overdue loops: `- [ ] ({size}) [{due_date}] {title}  <- OVERDUE`
 
-**Source 2 — Yesterday's `Tomorrow:` items:**
-- Format as task lines, skip if already covered by a loop from Source 1
+**Source 2 — Yesterday's Tomorrow items:**
+- Format as task lines, skip if already covered by a loop
 
-**Source 3 — Yesterday's uncompleted intentions:**
-- Include any `[ ]` intentions not in Source 1 or 2
+**Source 3 — Yesterday's unchecked items:**
+- Include any `- [ ]` items not in Source 1 or 2
 
 **Ranking and capping:**
-- Sort: overdue → due today → tomorrow items → carried intentions
+- Sort: overdue → due today → tomorrow items → carried items
 - Hard cap: max 5 total tasks
 - Size-weight: a single `L` or `XL` loop counts as 2 slots
 
@@ -79,47 +102,52 @@ Use the `Write` tool to create `{SHED}/drafts/daily-YYYY-MM-DD.md`:
 ```markdown
 # YYYY-MM-DD {Day of Week}
 
-## Morning: Intention
-{proposed task list from Step 3}
+> Focus: {focus line from Step 3}
 
-## Log
+{task list from Step 3, one bullet per line}
 
-## Evening: Reflection
-- **Energy:** /5
-- **Deep work:**  min
-- **Finished:**
-- **Blocked:**
-- **Tomorrow:**
 ```
 
-### Step 5 — Print terminal summary
+That's it. No sections, no ceremony. A focus line and a short task list. The rest of the
+day's entries get appended via `/log` or manual editing.
+
+### Step 5 — Scan for stale drafts
+
+Glob `{SHED}/drafts/*.md`. For each file:
+- Compute age in days from file modification time (use `ls -la` via Bash)
+- If age > 3 days, add to stale list
+
+### Step 6 — Print terminal summary
 
 ```
 Daily Start — YYYY-MM-DD ({Day of Week})
-  Proposed tasks: N (from N loops due, N carried, N tomorrow items)
-  Overdue loops:  N (oldest: TITLE — N days overdue)
-  Active loops:     N total
+  Focus: {focus line}
+  Tasks: N (from N loops due, N carried, N tomorrow items)
+  Overdue loops: N (oldest: TITLE — N days overdue)
+  Active loops: N total
   Active projects: N
-  Draft:          drafts/daily-YYYY-MM-DD.md
+  Draft: drafts/daily-YYYY-MM-DD.md
 
-To use: mv {SHED}/drafts/daily-YYYY-MM-DD.md {SHED}/daily/YYYY-MM-DD.md
+To use: cp {SHED}/drafts/daily-YYYY-MM-DD.md {SHED}/daily/YYYY-MM-DD.md
 ```
 
----
+If there are stale drafts, print after the summary:
 
-## Intention Quality Guidelines
+```
+⚠️  STALE DRAFTS ({count} files, oldest {N} days)
+  {filename} — {age}d old
+  {filename} — {age}d old
+  ...
 
-**Prefer specificity over vagueness:**
-- `- [ ] (S) [2026-03-03] Kick off #acme Phase 0 onsite session` <- good
-- `- [ ] Work on projects` <- bad
+Process or delete:
+  rm {SHED}/drafts/{filename}
+```
 
-**For carried intentions, add context:**
-- If yesterday's blocked section mentioned it: append `  <- blocked: {reason}`
-
-**Respect the WIP cap:** 5 tasks maximum. Better to finish 3 than to plan 5 and feel behind.
-
-**Energy-aware scheduling:** If yesterday's energy score was <= 2/5, open with:
-`> Low energy day — consider 2 tasks max and one clear win.`
+**Intention quality guidelines:**
+- Prefer specificity: `- [ ] (S) Kick off #acme Phase 0` not `- [ ] Work on projects`
+- Respect the WIP cap: 5 tasks maximum. Better to finish 3 than plan 5.
+- If yesterday's energy was low (mentioned in `> End:` line), open with:
+  `> Low energy carry-over — consider 2 tasks max and one clear win.`
 
 ---
 
@@ -130,5 +158,6 @@ To use: mv {SHED}/drafts/daily-YYYY-MM-DD.md {SHED}/daily/YYYY-MM-DD.md
 - Do NOT close loops or modify loop data — read only
 - Do NOT add new loops — this is a read-then-draft operation
 - Carried intentions are *suggestions* — the human edits before using
+- NEVER delete stale drafts — only surface them for human decision
 
 ARGUMENTS: $ARGUMENTS

@@ -291,3 +291,83 @@ class TestGraphStats:
         stats = graph_stats(graph)
         assert stats["total_entities"] == 0
         assert stats["total_relationships"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Prose mention extraction (Slack ingestion)
+# ---------------------------------------------------------------------------
+
+
+class TestProseMentions:
+    def test_prose_mention_creates_mentioned_in_edge(self, workspace):
+        # The agent-bricks note is the source; the lakebase note is the target.
+        # Plain prose mention of "Lakebase" should create a mentioned-in edge.
+        _write_knowledge(workspace, "lakebase", "# Lakebase\n\n#lakebase\n")
+        _write_knowledge(
+            workspace, "agent-bricks",
+            "# Agent Bricks\n\n#agent-bricks\n\n"
+            "Customers building MAS apps want Lakebase Agent Memory in production.\n"
+        )
+        graph = build_graph(workspace)
+        edges = [(r.source, r.target, r.relation_type)
+                 for r in graph.relationships
+                 if r.source == "agent-bricks" and r.target == "lakebase"]
+        assert (("agent-bricks", "lakebase", RelationType.MENTIONED_IN)) in edges
+
+    def test_prose_mention_handles_multi_word_slug(self, workspace):
+        # "Knowledge Assistant" (with a space) should match the slug "knowledge-assistant".
+        _write_knowledge(workspace, "knowledge-assistant", "# KA\n\n#concept\n")
+        _write_knowledge(
+            workspace, "agent-bricks",
+            "# Agent Bricks\n\nProduct includes the Knowledge Assistant.\n"
+        )
+        graph = build_graph(workspace)
+        targets = {r.target for r in graph.relationships if r.source == "agent-bricks"}
+        assert "knowledge-assistant" in targets
+
+    def test_prose_mention_skips_self(self, workspace):
+        _write_knowledge(workspace, "lakebase", "# Lakebase\n\nLakebase is great.\n")
+        graph = build_graph(workspace)
+        edges = [(r.source, r.target) for r in graph.relationships
+                 if r.source == "lakebase" and r.target == "lakebase"]
+        assert edges == []
+
+    def test_prose_mention_skipped_when_structured_edge_exists(self, workspace):
+        # If a structured extractor (typed header / wikilink) already linked
+        # source→target, prose extraction should NOT add a redundant edge.
+        _write_knowledge(workspace, "lakebase", "# Lakebase\n")
+        _write_knowledge(
+            workspace, "ai-functions",
+            "# AI Functions\n\n**uses:** [[lakebase]]\n\nWe rely on Lakebase here.\n"
+        )
+        graph = build_graph(workspace)
+        types = sorted(r.relation_type.value for r in graph.relationships
+                       if r.source == "ai-functions" and r.target == "lakebase")
+        # Only the structured edges (uses + relates-to from the wikilink) —
+        # no mentioned-in from prose.
+        assert "mentioned-in" not in types
+        assert "uses" in types
+
+    def test_prose_mention_skips_short_slugs(self, workspace):
+        # 3-char slug "rag" — should NOT be auto-extracted from prose ("rag")
+        # because slugs <4 chars match too many false positives in real prose.
+        _write_knowledge(workspace, "rag", "# RAG\n")
+        _write_knowledge(workspace, "alpha", "# Alpha\n\nWe build a rag pipeline.\n")
+        graph = build_graph(workspace)
+        edges = [(r.source, r.target) for r in graph.relationships
+                 if r.source == "alpha" and r.target == "rag"]
+        assert edges == []
+
+    def test_prose_mention_only_concept_project_tool_org(self, workspace):
+        # Person entities should NOT be matched in prose — too noisy.
+        _write_knowledge(workspace, "alice-chen", "# Alice\n\n#person\n")
+        _write_knowledge(
+            workspace, "alpha",
+            "# Alpha\n\nThanks to Alice Chen for the help.\n"
+        )
+        graph = build_graph(workspace)
+        # Even though "Alice Chen" appears in prose, no edge should be created
+        # because alice-chen is type=person.
+        edges = [(r.source, r.target) for r in graph.relationships
+                 if r.source == "alpha" and r.target == "alice-chen"]
+        assert edges == []
