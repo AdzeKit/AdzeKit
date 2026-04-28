@@ -131,11 +131,46 @@ def _build_task_list(
 # ---------------------------------------------------------------------------
 
 
+def _try_sync_pull(settings: Settings) -> bool:
+    """Pull workbench from rclone remote if configured. Returns True on success."""
+    if not settings.has_rclone_remote:
+        return False
+    try:
+        settings.sync_workbench()
+        return True
+    except Exception:
+        return False
+
+
+def _try_sync_push(settings: Settings) -> bool:
+    """Push workbench to rclone remote if configured. Returns True on success."""
+    if not settings.has_rclone_remote:
+        return False
+    try:
+        settings.push_workbench()
+        return True
+    except Exception:
+        return False
+
+
+def _refresh_tag_snippets(settings: Settings) -> bool:
+    """Regenerate Cursor autocomplete snippets. Returns True on success."""
+    try:
+        from adzekit.modules.tags import generate_cursor_snippets
+        generate_cursor_snippets(settings)
+        return True
+    except Exception:
+        return False
+
+
 def daily_start(
     target_date: date | None = None,
     settings: Settings | None = None,
 ) -> tuple[Path | None, dict]:
     """Create today's daily note from yesterday's context and active loops.
+
+    Also pulls the workbench (stock + drafts) from rclone if configured,
+    and refreshes Cursor tag autocomplete snippets.
 
     Returns (path_or_None, summary_dict).
     If the note already exists, returns (None, {"already_exists": True, ...}).
@@ -146,8 +181,17 @@ def daily_start(
     iso = target_date.isoformat()
     path = settings.daily_dir / f"{iso}.md"
 
+    # Sync before building the note so carried context is up to date
+    synced = _try_sync_pull(settings)
+    tags_refreshed = _refresh_tag_snippets(settings)
+
     if path.exists():
-        return None, {"already_exists": True, "date": iso}
+        return None, {
+            "already_exists": True,
+            "date": iso,
+            "synced": synced,
+            "tags_refreshed": tags_refreshed,
+        }
 
     # Load previous note
     prev = _find_previous_note(target_date, settings)
@@ -189,6 +233,8 @@ def daily_start(
         "carried_count": len(carried),
         "tomorrow_count": len(tomorrow_items),
         "active_loops_total": len(loops),
+        "synced": synced,
+        "tags_refreshed": tags_refreshed,
     }
     return path, summary
 
@@ -262,7 +308,10 @@ def daily_close(
     target_date: date | None = None,
     settings: Settings | None = None,
 ) -> tuple[bool, dict]:
-    """Append the > End: line to today's note and sweep closed loops.
+    """Append the > End: line to today's note, sweep closed loops, and push.
+
+    Also pushes the workbench (stock + drafts) to rclone if configured,
+    and refreshes Cursor tag autocomplete snippets.
 
     Returns (success, summary_dict).
     """
@@ -294,6 +343,10 @@ def daily_close(
 
     swept = sweep_closed(settings)
 
+    # Push workbench and refresh tags after closing
+    synced = _try_sync_push(settings)
+    tags_refreshed = _refresh_tag_snippets(settings)
+
     summary = {
         "date": iso,
         "done_count": done,
@@ -301,5 +354,7 @@ def daily_close(
         "log_count": log_entries,
         "tomorrow_suggestion": tomorrow,
         "swept_count": len(swept),
+        "synced": synced,
+        "tags_refreshed": tags_refreshed,
     }
     return True, summary

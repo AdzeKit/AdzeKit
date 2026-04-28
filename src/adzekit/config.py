@@ -442,11 +442,19 @@ class Settings(BaseSettings):
                 "Run 'adzekit setup-sync' or set ADZEKIT_RCLONE_REMOTE."
             )
 
-    def _rclone_pull(self, remote: str, local: Path) -> None:
-        """Pull from remote to local, tolerating a missing remote dir."""
+    def _rclone_pull(
+        self, remote: str, local: Path, *, additive: bool = False,
+    ) -> None:
+        """Pull from remote to local, tolerating a missing remote dir.
+
+        When *additive* is True, uses ``rclone copy`` so local files that
+        don't exist on the remote are preserved.  Use this for stock/ to
+        avoid data loss when the remote hasn't been pushed yet.
+        """
         local.mkdir(parents=True, exist_ok=True)
+        verb = "copy" if additive else "sync"
         result = subprocess.run(
-            ["rclone", "sync", remote, str(local), "--create-empty-src-dirs"],
+            ["rclone", verb, remote, str(local), "--create-empty-src-dirs"],
             capture_output=True,
             text=True,
         )
@@ -470,10 +478,10 @@ class Settings(BaseSettings):
         )
 
     def sync_stock(self) -> None:
-        """Pull stock/ from the rclone remote."""
+        """Pull stock/ from the rclone remote (additive -- never deletes local files)."""
         self._require_rclone_remote()
         self._check_rclone()
-        self._rclone_pull(self.rclone_stock_remote, self.stock_dir)
+        self._rclone_pull(self.rclone_stock_remote, self.stock_dir, additive=True)
 
     def push_stock(self) -> None:
         """Push local stock/ to the rclone remote."""

@@ -119,12 +119,20 @@ def cmd_today(args: argparse.Namespace) -> None:
 
 
 def cmd_daily_start(args: argparse.Namespace) -> None:
-    """Bootstrap today's daily note from yesterday's context and active loops."""
+    """Bootstrap today's daily note from yesterday's context and active loops.
+
+    Also syncs workbench (pull) and refreshes tag autocomplete.
+    """
     from adzekit.modules.daily import daily_start
 
     settings = _resolve_settings(args)
     target = date.fromisoformat(args.date) if args.date else None
     path, summary = daily_start(target_date=target, settings=settings)
+
+    if summary.get("synced"):
+        print("Synced workbench from remote (stock is additive-only).")
+    if summary.get("tags_refreshed"):
+        print("Tag snippets refreshed.")
 
     if summary.get("already_exists"):
         print(f"Today's note already exists at daily/{summary['date']}.md")
@@ -143,7 +151,7 @@ def cmd_daily_start(args: argparse.Namespace) -> None:
 
 
 def cmd_daily_close(args: argparse.Namespace) -> None:
-    """Append reflection line to today's note and sweep closed loops."""
+    """Append reflection line to today's note, sweep loops, and push workbench."""
     from adzekit.modules.daily import daily_close
 
     settings = _resolve_settings(args)
@@ -165,6 +173,10 @@ def cmd_daily_close(args: argparse.Namespace) -> None:
     print(f"  Tomorrow:    {summary['tomorrow_suggestion']}")
     if summary.get("swept_count", 0) > 0:
         print(f"  Swept:       {summary['swept_count']} loop(s) to archive")
+    if summary.get("synced"):
+        print("  Pushed workbench to remote.")
+    if summary.get("tags_refreshed"):
+        print("  Tag snippets refreshed.")
 
 
 # -- prune-drafts ----------------------------------------------------------
@@ -608,26 +620,31 @@ def cmd_set_shed(args: argparse.Namespace) -> None:
 
 
 def cmd_sync(args: argparse.Namespace) -> None:
-    """Sync stock/ and drafts/ with the rclone remote."""
+    """Sync stock/ and drafts/ with the rclone remote, then refresh tag snippets."""
+    from adzekit.modules.tags import generate_cursor_snippets
+
     settings = _resolve_settings(args)
 
     direction = getattr(args, "direction", None)
 
     if direction in (None, "pull"):
-        print("Pulling stock/ and drafts/ from remote...")
+        print("Pulling stock/ and drafts/ from remote (stock is additive-only)...")
         settings.sync_workbench()
         if direction == "pull":
-            print("Pull complete.")
+            generate_cursor_snippets(settings)
+            print("Pull complete. Tag snippets refreshed.")
             return
 
     if direction in (None, "push"):
         print("Pushing stock/ and drafts/ to remote...")
         settings.push_workbench()
         if direction == "push":
-            print("Push complete.")
+            generate_cursor_snippets(settings)
+            print("Push complete. Tag snippets refreshed.")
             return
 
-    print("Sync complete (pull + push).")
+    generate_cursor_snippets(settings)
+    print("Sync complete (pull + push). Tag snippets refreshed.")
 
 
 # -- setup-sync ------------------------------------------------------------
