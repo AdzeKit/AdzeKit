@@ -195,6 +195,10 @@ class Settings(BaseSettings):
         return self.shed / "daily"
 
     @property
+    def daily_archive_dir(self) -> Path:
+        return self.daily_dir / "archive"
+
+    @property
     def knowledge_dir(self) -> Path:
         return self.shed / "knowledge"
 
@@ -348,6 +352,7 @@ class Settings(BaseSettings):
             self.backlog_dir,
             self.archive_dir,
             self.daily_dir,
+            self.daily_archive_dir,
             self.knowledge_dir,
             self.reviews_dir,
             self.graph_dir,

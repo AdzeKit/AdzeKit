@@ -18,6 +18,9 @@ from adzekit.modules.loops import get_active_loops, sweep_closed
 from adzekit.parser import parse_daily_note
 
 _TASK_RE = re.compile(r"^-\s+\[([ xX])\]\s+(.+)$")
+_DAILY_FILENAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
+
+DAILY_ARCHIVE_DAYS = 30
 
 # Triage line: `- [ ] OVERDUE 23d: Manulife KARL POC ticket → kill / defer / promote`
 # After resolution: `- [x] OVERDUE 23d: Manulife KARL POC ticket → kill`
@@ -33,6 +36,47 @@ def _atomic_write(path: Path, content: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding="utf-8")
     tmp.rename(path)
+
+
+def archive_old_dailies(
+    settings: Settings | None = None,
+    days: int | None = None,
+) -> list[str]:
+    """Move daily notes older than N days into daily/archive/.
+
+    Filename must match ``YYYY-MM-DD.md``. Files in subdirectories (e.g. the
+    archive itself) are skipped. Returns the list of archived filenames.
+    """
+    settings = settings or get_settings()
+    threshold = days if days is not None else DAILY_ARCHIVE_DAYS
+    daily = settings.daily_dir
+    if not daily.exists():
+        return []
+
+    archive = settings.daily_archive_dir
+    archive.mkdir(parents=True, exist_ok=True)
+
+    today = date.today()
+    cutoff = today - timedelta(days=threshold)
+    moved: list[str] = []
+
+    for path in daily.iterdir():
+        if not path.is_file():
+            continue
+        m = _DAILY_FILENAME_RE.match(path.name)
+        if not m:
+            continue
+        try:
+            d = date.fromisoformat(m.group(1))
+        except ValueError:
+            continue
+        if d < cutoff:
+            target = archive / path.name
+            path.rename(target)
+            moved.append(path.name)
+
+    moved.sort()
+    return moved
 
 
 def _find_previous_note(

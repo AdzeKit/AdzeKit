@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 from adzekit.cli import main
-from adzekit.modules.daily import daily_close, daily_start
+from adzekit.modules.daily import archive_old_dailies, daily_close, daily_start
 
 
 class TestDailyStart:
@@ -235,3 +235,42 @@ class TestDailyClose:
         main(["--shed", str(tmp_path / "shed"), "daily-close"])
         output = capsys.readouterr().out
         assert "Daily Close" in output or "already has" in output
+
+
+class TestArchiveOldDailies:
+    def test_moves_old_files(self, workspace):
+        today = date.today()
+        old = today - timedelta(days=45)
+        recent = today - timedelta(days=10)
+
+        old_path = workspace.daily_dir / f"{old.isoformat()}.md"
+        recent_path = workspace.daily_dir / f"{recent.isoformat()}.md"
+        old_path.write_text("# Old\n")
+        recent_path.write_text("# Recent\n")
+
+        moved = archive_old_dailies(workspace, days=30)
+
+        assert moved == [f"{old.isoformat()}.md"]
+        assert not old_path.exists()
+        assert (workspace.daily_archive_dir / f"{old.isoformat()}.md").exists()
+        assert recent_path.exists()
+
+    def test_skips_non_daily_filenames(self, workspace):
+        odd = workspace.daily_dir / "notes.md"
+        odd.write_text("# Notes\n")
+
+        moved = archive_old_dailies(workspace, days=30)
+
+        assert moved == []
+        assert odd.exists()
+
+    def test_uses_default_threshold(self, workspace):
+        today = date.today()
+        boundary = today - timedelta(days=29)
+        path = workspace.daily_dir / f"{boundary.isoformat()}.md"
+        path.write_text("# Boundary\n")
+
+        moved = archive_old_dailies(workspace)
+
+        assert moved == []
+        assert path.exists()
