@@ -8,7 +8,7 @@ Lifecycle:
   1. Agent writes a file to drafts/
   2. `adzekit cull` adds an entry to ## Pending (if not already listed)
   3. Human reads the draft, copies loops, discards -- marks the entry [x]
-  4. Next `adzekit cull` clears [x] items from ## Pending
+  4. Next `adzekit cull` clears [x] items, plus any orphans whose draft is gone
 """
 
 from __future__ import annotations
@@ -103,6 +103,9 @@ def _list_draft_files(settings: Settings) -> list[Path]:
 _BENCH_TS_RE = re.compile(r"^- \[ \] \[(\d{4}-\d{2}-\d{2})(?: \d{2}:\d{2})?\] (.+?)(?:\s*\([^)]+\))?$")
 
 
+STALE_BENCH_DAYS = 30
+
+
 def stale_bench_items(
     settings: Settings | None = None,
     days: int | None = None,
@@ -111,10 +114,12 @@ def stale_bench_items(
 
     Each item is a {"text": ..., "date": "YYYY-MM-DD", "days": int} dict, oldest first.
     """
+    # Bench staleness is decoupled from stale_loop_days: bench items are draft
+    # proposals awaiting triage, not active work commitments.
     from datetime import date as _date
 
     settings = settings or get_settings()
-    threshold = days if days is not None else settings.stale_loop_days
+    threshold = days if days is not None else STALE_BENCH_DAYS
     bench = settings.bench_path
     if not bench.exists():
         return []
@@ -169,8 +174,20 @@ def cull(settings: Settings | None = None) -> tuple[int, int]:
         elif line.strip():
             kept.append(line)
 
-    already_listed = _referenced_filenames(kept)
     drafts = _list_draft_files(settings)
+    existing_names = {d.name for d in drafts}
+
+    # Drop orphan entries whose referenced draft file is gone from drafts/.
+    surviving: list[str] = []
+    for line in kept:
+        m = PENDING_RE.match(line)
+        if m and m.group(1).strip() not in existing_names:
+            cleared += 1
+            continue
+        surviving.append(line)
+    kept = surviving
+
+    already_listed = _referenced_filenames(kept)
 
     added = 0
     for draft in drafts:

@@ -50,6 +50,26 @@ def test_cull_clears_checked_items(workspace):
     assert "keep-this.md" in content
 
 
+def test_cull_drops_orphan_entries(workspace):
+    workspace.bench_path.write_text(
+        "# Bench\n\n"
+        "## Pending\n"
+        "- [ ] [2026-03-05 14:00] Orphaned (gone.md)\n"
+        "- [ ] [2026-03-05 15:00] Still Here (here.md)\n\n"
+        "## Quick Capture\n"
+    )
+    drafts = workspace.drafts_dir
+    (drafts / "here.md").write_text("# Still Here\n")
+
+    added, cleared = cull(workspace)
+
+    assert cleared == 1
+    assert added == 0
+    content = workspace.bench_path.read_text()
+    assert "gone.md" not in content
+    assert "here.md" in content
+
+
 def test_cull_skips_non_md_files(workspace):
     drafts = workspace.drafts_dir
     (drafts / "data.json").write_text("{}")

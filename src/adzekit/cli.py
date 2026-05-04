@@ -280,19 +280,23 @@ def cmd_sweep(args: argparse.Namespace) -> None:
 
 
 def cmd_cull(args: argparse.Namespace) -> None:
-    """Scan drafts/ and update bench.md with pending items."""
+    """Scan drafts/ and update bench.md, then archive old daily notes."""
     from adzekit.modules.bench import cull
+    from adzekit.modules.daily import archive_old_dailies
 
     settings = _resolve_settings(args)
     added, cleared = cull(settings)
+    archived = archive_old_dailies(settings)
 
-    if not added and not cleared:
-        print("Bench is up to date -- no new drafts, nothing to clear.")
+    if not added and not cleared and not archived:
+        print("Bench and daily are up to date -- nothing to clear or archive.")
     else:
         if cleared:
-            print(f"  cleared {cleared} processed item(s)")
+            print(f"  cleared {cleared} processed/orphan item(s) from bench")
         if added:
             print(f"  added {added} new draft(s) to bench")
+        if archived:
+            print(f"  archived {len(archived)} daily note(s) to {settings.daily_archive_dir}")
         print(f"\nBench updated: {settings.bench_path}")
 
 
