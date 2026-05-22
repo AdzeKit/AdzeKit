@@ -27,11 +27,11 @@ class TestDailyStart:
         note = workspace.daily_dir / f"{yesterday.isoformat()}.md"
         note.write_text(
             f"# {yesterday.isoformat()} Test\n\n"
-            "## Morning: Intention\n"
+            "## Intention\n"
             "- [ ] Carry this forward\n"
             "- [x] Already done\n\n"
             "## Log\n\n"
-            "## Evening: Reflection\n"
+            "## Reflection\n"
             "- **Finished:**\n"
             "- **Blocked:**\n"
             "- **Tomorrow:** Do next thing\n"
@@ -84,15 +84,15 @@ class TestDailyStart:
         # Count `- [ ]` only inside the Morning: Intention section. The new
         # Triage block can also contain unchecked items (one per overdue loop)
         # but the WIP cap of 5 applies only to the day's intentions.
-        morning = content.split("## Morning: Intention", 1)[1].split("## Log", 1)[0]
+        morning = content.split("## Intention", 1)[1].split("## Log", 1)[0]
         assert morning.count("- [ ]") <= 5
 
     def test_has_section_headers(self, workspace):
         path, _ = daily_start(settings=workspace)
         content = path.read_text()
-        assert "## Morning: Intention" in content
+        assert "## Intention" in content
         assert "## Log" in content
-        assert "## Evening: Reflection" in content
+        assert "## Reflection" in content
 
     def test_lookback_across_gap(self, workspace):
         today = date.today()
@@ -100,10 +100,10 @@ class TestDailyStart:
         note = workspace.daily_dir / f"{three_ago.isoformat()}.md"
         note.write_text(
             f"# {three_ago.isoformat()} Test\n\n"
-            "## Morning: Intention\n"
+            "## Intention\n"
             "- [ ] Weekend carry\n\n"
             "## Log\n\n"
-            "## Evening: Reflection\n"
+            "## Reflection\n"
             "- **Finished:**\n"
             "- **Blocked:**\n"
             "- **Tomorrow:**\n"
@@ -119,10 +119,10 @@ class TestDailyStart:
         note = workspace.daily_dir / f"{yesterday.isoformat()}.md"
         note.write_text(
             f"# {yesterday.isoformat()} Test\n\n"
-            "## Morning: Intention\n"
+            "## Intention\n"
             "- [ ] Same task name\n\n"
             "## Log\n\n"
-            "## Evening: Reflection\n"
+            "## Reflection\n"
             "- **Tomorrow:** Same task name\n"
         )
 
@@ -148,12 +148,12 @@ class TestDailyClose:
         note = workspace.daily_dir / f"{today.isoformat()}.md"
         note.write_text(
             f"# {today.isoformat()} Test\n\n"
-            "## Morning: Intention\n"
+            "## Intention\n"
             "- [x] Done thing\n"
             "- [ ] Open thing\n\n"
             "## Log\n"
             "- 09:00 Did stuff\n\n"
-            "## Evening: Reflection\n"
+            "## Reflection\n"
             "- **Finished:**\n"
             "- **Blocked:**\n"
             "- **Tomorrow:**\n"
@@ -188,7 +188,7 @@ class TestDailyClose:
         note = workspace.daily_dir / f"{today.isoformat()}.md"
         note.write_text(
             f"# {today.isoformat()} Test\n\n## Log\n\n"
-            "## Evening: Reflection\n"
+            "## Reflection\n"
         )
         workspace.loops_active.write_text(
             "# Active Loops\n\n"
@@ -209,7 +209,7 @@ class TestDailyClose:
         note = workspace.daily_dir / f"{today.isoformat()}.md"
         note.write_text(
             f"# {today.isoformat()} Test\n\n## Log\n\n"
-            "## Evening: Reflection\n"
+            "## Reflection\n"
         )
         workspace.loops_active.write_text(
             "# Active Loops\n\n"

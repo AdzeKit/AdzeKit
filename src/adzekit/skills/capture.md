@@ -20,8 +20,11 @@ and one-line notes without breaking flow.
    No daily note for {today}. Run /daily-start first.
    ```
    and stop. Capture never creates daily notes — that's daily-start's job.
-3. Determine the insertion point: the end of the file, before any `> End:` blockquote if one
-   exists; otherwise the literal end-of-file.
+3. Determine the insertion point: the end of the `## Log` section. If the daily note follows
+   the four-section format (Triage / Intention / Log / Reflection), insert immediately after
+   the last existing line within `## Log` and before the start of `## Reflection`. If the
+   note lacks a `## Log` heading (legacy format), fall back to inserting before any `> End:`
+   blockquote, or at end-of-file when no bookend is present.
 4. Format the line with a timestamp prefix: `- [HH:MM] {text}` (24-hour local time).
 5. Append the formatted line to the daily note.
 6. Print one line to terminal confirming the capture.
@@ -47,8 +50,10 @@ This skill is intentionally trivial — most adapters can implement it as a pure
 with no LLM call at all. The shell equivalent is roughly:
 
 ```bash
-echo "- [$(date +%H:%M)] $TEXT" >> "$SHED/daily/$(date +%Y-%m-%d).md"
+# Naive append (no section-awareness):
+echo "- $(date +%H:%M) $TEXT" >> "$SHED/daily/$(date +%Y-%m-%d).md"
 ```
 
 The CLI `adzekit log "..."` (already present in workspace as `/log`) is the canonical
-non-agent implementation. Agent-based adapters can route to the CLI rather than re-implementing.
+non-agent implementation; it inserts at the end of `## Log` rather than at EOF. Agent-based
+adapters should route to the CLI rather than re-implementing the section-aware insert.

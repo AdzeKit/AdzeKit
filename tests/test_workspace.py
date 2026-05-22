@@ -31,8 +31,10 @@ def test_create_daily_note(workspace):
     path = create_daily_note(today, workspace)
     assert path.exists()
     content = path.read_text()
-    assert "Morning: Intention" in content
-    assert "Evening: Reflection" in content
+    assert "## Triage" in content
+    assert "## Intention" in content
+    assert "## Log" in content
+    assert "## Reflection" in content
     assert today.isoformat() in content
 
     # Creating again should not overwrite

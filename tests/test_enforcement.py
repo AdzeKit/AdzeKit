@@ -90,10 +90,16 @@ class TestStaleBenchItems:
 
 
 class TestTriagePanel:
-    def test_no_triage_when_clean(self, workspace):
+    def test_no_triage_items_when_clean(self, workspace):
         path, summary = daily_start(settings=workspace)
         content = path.read_text()
-        assert "## Triage" not in content
+        # Every daily note has the canonical four-section structure, so the
+        # heading is always present. The body is empty when there's nothing
+        # to triage.
+        assert "## Triage" in content
+        triage_block = content.split("## Triage", 1)[1].split("##", 1)[0]
+        assert "OVERDUE" not in triage_block
+        assert "STALE" not in triage_block
         assert summary["triage_count"] == 0
 
     def test_triage_block_with_overdue_loop(self, workspace):
