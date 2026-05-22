@@ -277,6 +277,28 @@ def _drafts_gc(args: argparse.Namespace) -> None:
     print(f"\n{len(archived)} draft(s) gc'd.")
 
 
+# -- distill ---------------------------------------------------------------
+
+
+def cmd_distill(args: argparse.Namespace) -> None:
+    """Detect repeated edit patterns in accepted drafts and emit proposals."""
+    from adzekit.modules.distill import run_distill
+
+    settings = _resolve_settings(args)
+    proposals = run_distill(
+        settings=settings,
+        min_occurrences=args.min_occurrences,
+        window_days=args.window_days,
+    )
+    if not proposals:
+        print("No patterns repeated enough to distill (try lowering --min-occurrences).")
+        return
+    for p in proposals:
+        print(f"  proposed: {p.relative_to(settings.shed)}")
+    print(f"\n{len(proposals)} skill proposal(s) written to drafts/skill-proposals/.")
+    print("Review with `adzekit drafts list`; promote with `adzekit drafts accept <N>`.")
+
+
 # -- automate --------------------------------------------------------------
 
 
@@ -1034,6 +1056,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Delete files older than N days (default: from config or 7).",
     )
     p_pd.set_defaults(func=cmd_prune_drafts)
+
+    # distill
+    p_distill = sub.add_parser(
+        "distill",
+        help="Scan accepted drafts for repeated edit patterns; emit skill proposals.",
+    )
+    p_distill.add_argument(
+        "--min-occurrences", type=int, default=3,
+        help="Minimum pattern occurrences to propose a skill (default: 3).",
+    )
+    p_distill.add_argument(
+        "--window-days", type=int, default=60,
+        help="Rolling window in days to search (default: 60).",
+    )
+    p_distill.set_defaults(func=cmd_distill)
 
     # automate / cadence (cadence is the preferred name; automate kept for
     # backward compat)
