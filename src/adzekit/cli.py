@@ -430,30 +430,6 @@ def cmd_promote(args: argparse.Namespace) -> None:
     print(path)
 
 
-# -- poc-init --------------------------------------------------------------
-
-
-def cmd_poc_init(args: argparse.Namespace) -> None:
-    """Generate a POC design document template in stock/."""
-    import sys
-
-    from adzekit.modules.export import to_docx
-    from adzekit.modules.poc import generate_poc
-
-    settings = _resolve_settings(args)
-    try:
-        path = generate_poc(args.slug, settings)
-    except FileNotFoundError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
-
-    print(f"Generated POC template: {path}")
-
-    if args.docx:
-        docx_path = to_docx(path)
-        print(f"Exported to docx: {docx_path}")
-
-
 # -- export ----------------------------------------------------------------
 
 
@@ -505,55 +481,6 @@ def cmd_status(args: argparse.Namespace) -> None:
             stale = f"{a.stale_days}d ago" if a.stale_days is not None else "untracked"
             created = f"{a.age_days}d old" if a.age_days is not None else ""
             print(f"  {name}: modified {stale}" + (f", {created}" if created else ""))
-
-
-# -- serve -----------------------------------------------------------------
-
-
-def cmd_serve(args: argparse.Namespace) -> None:
-    """Start the local web UI."""
-    import uvicorn
-
-    print(f"Starting AdzeKit UI at http://{args.host}:{args.port}")
-    uvicorn.run(
-        "adzekit.ui.app:app",
-        host=args.host,
-        port=args.port,
-        reload=False,
-    )
-
-
-# -- agent -----------------------------------------------------------------
-
-
-def cmd_agent(args: argparse.Namespace) -> None:
-    """Run the agent with a one-shot message.
-
-    DEPRECATED: Use Claude Code instead.
-    """
-    import warnings
-
-    warnings.warn(
-        "`adzekit agent` is deprecated and will be removed in a future release.\n"
-        "Use Claude Code with AdzeKit instead.",
-        DeprecationWarning,
-        stacklevel=1,
-    )
-    print(
-        "Deprecated: `adzekit agent` is superseded by Claude Code.\n"
-    )
-    import adzekit.agent.shed_tools  # noqa: F401
-    from adzekit.agent.orchestrator import run_agent
-
-    print(f"Agent processing: {args.message}\n")
-    try:
-        result = run_agent(args.message)
-        print(result.response)
-        if result.tool_calls_made > 0:
-            print(f"\n({result.tool_calls_made} tool calls made across {len(result.turns)} turns)")
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
 
 
 # -- graph -----------------------------------------------------------------
@@ -871,16 +798,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="Show shed health summary.")
     p_status.set_defaults(func=cmd_status)
 
-    # poc-init
-    p_poc = sub.add_parser("poc-init", help="Generate a POC design document in stock/.")
-    p_poc.add_argument("slug", help="Project slug (e.g. acme-datamigration).")
-    p_poc.add_argument(
-        "--docx",
-        action="store_true",
-        help="Also export the generated template to .docx via pandoc.",
-    )
-    p_poc.set_defaults(func=cmd_poc_init)
-
     # export
     p_export = sub.add_parser("export", help="Export a markdown file to docx.")
     p_export.add_argument(
@@ -919,18 +836,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_setup.set_defaults(func=cmd_setup_sync)
 
-    # serve
-    p_serve = sub.add_parser("serve", help="Start the local web UI.")
-    p_serve.add_argument(
-        "--port", type=int, default=8742,
-        help="Port to serve on (default: 8742).",
-    )
-    p_serve.add_argument(
-        "--host", default="127.0.0.1",
-        help="Host to bind to (default: 127.0.0.1).",
-    )
-    p_serve.set_defaults(func=cmd_serve)
-
     # set-shed
     p_set_shed = sub.add_parser(
         "set-shed",
@@ -941,11 +846,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the AdzeKit shed (e.g. ~/Repos/adzekit-workspace).",
     )
     p_set_shed.set_defaults(func=cmd_set_shed)
-
-    # agent
-    p_agent = sub.add_parser("agent", help="Run the agent with a one-shot message.")
-    p_agent.add_argument("message", help="Message to send to the agent.")
-    p_agent.set_defaults(func=cmd_agent)
 
     # graph
     p_graph = sub.add_parser("graph", help="Knowledge graph operations.")
