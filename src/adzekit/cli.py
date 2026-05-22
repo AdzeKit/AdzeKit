@@ -281,8 +281,15 @@ def _drafts_gc(args: argparse.Namespace) -> None:
 
 
 def cmd_automate(args: argparse.Namespace) -> None:
-    """Install or uninstall launchd automation."""
-    from adzekit.modules.automate import install, uninstall
+    """Install, uninstall, or check status of launchd cadence plists."""
+    from adzekit.modules.automate import (
+        LAUNCH_AGENTS_DIR,
+        PLIST_PREFIX,
+        SCHEDULES,
+        in_deep_work_window,
+        install,
+        uninstall,
+    )
 
     settings = _resolve_settings(args)
 
@@ -299,6 +306,18 @@ def cmd_automate(args: argparse.Namespace) -> None:
             for p in paths:
                 print(f"  removed: {p.name}")
             print(f"\n{len(paths)} plist(s) unloaded and removed.")
+    elif args.action == "status":
+        installed_count = 0
+        for name in SCHEDULES:
+            path = LAUNCH_AGENTS_DIR / f"{PLIST_PREFIX}.{name}.plist"
+            present = path.exists()
+            marker = "✓" if present else "✗"
+            print(f"  {marker} {name:20s} {path}")
+            if present:
+                installed_count += 1
+        guard = in_deep_work_window(settings=settings)
+        print(f"\n{installed_count}/{len(SCHEDULES)} plist(s) installed.")
+        print(f"Deep-work window active right now: {guard}")
 
 
 # -- review ----------------------------------------------------------------
@@ -1016,15 +1035,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_pd.set_defaults(func=cmd_prune_drafts)
 
-    # automate
-    p_auto = sub.add_parser(
-        "automate", help="Install/uninstall launchd automation.",
-    )
-    p_auto.add_argument(
-        "action", choices=["install", "uninstall"],
-        help="install or uninstall launchd plists.",
-    )
-    p_auto.set_defaults(func=cmd_automate)
+    # automate / cadence (cadence is the preferred name; automate kept for
+    # backward compat)
+    for cmd_name, help_text in (
+        ("cadence", "Manage the launchd cadence layer (daily/weekly rituals)."),
+        ("automate", "Alias for `cadence` (deprecated)."),
+    ):
+        p_cad = sub.add_parser(cmd_name, help=help_text)
+        p_cad.add_argument(
+            "action", choices=["install", "uninstall", "status"],
+            help="install plists, uninstall, or show current cadence status.",
+        )
+        p_cad.set_defaults(func=cmd_automate)
 
     return parser
 

@@ -27,13 +27,16 @@ class TestPlistGeneration:
         assert "com.adzekit.daily-close" in xml
         assert "<integer>17</integer>" in xml
 
-    def test_prune_drafts_sunday(self, workspace):
+    def test_drafts_gc_sunday(self, workspace):
         xml = _generate_plist(
-            "prune-drafts", SCHEDULES["prune-drafts"], workspace.shed,
+            "drafts-gc", SCHEDULES["drafts-gc"], workspace.shed,
         )
-        assert "com.adzekit.prune-drafts" in xml
+        assert "com.adzekit.drafts-gc" in xml
         assert "<integer>9</integer>" in xml
         assert "<integer>0</integer>" in xml
+        # Multi-word command must serialize as separate <string> elements.
+        assert "<string>drafts</string>" in xml
+        assert "<string>gc</string>" in xml
 
     def test_all_schedules_valid_xml(self, workspace):
         for name, schedule in SCHEDULES.items():
@@ -69,7 +72,7 @@ class TestPlistGeneration:
         main(["--shed", str(tmp_path / "shed"), "automate", "install"])
         output = capsys.readouterr().out
         assert "installed" in output
-        assert len(list(temp_agents.glob("*.plist"))) == 3
+        assert len(list(temp_agents.glob("*.plist"))) == len(SCHEDULES)
 
         main(["--shed", str(tmp_path / "shed"), "automate", "uninstall"])
         output = capsys.readouterr().out

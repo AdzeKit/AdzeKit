@@ -1,15 +1,22 @@
-"""macOS launchd automation for AdzeKit.
+"""macOS launchd cadence layer for AdzeKit.
 
 Generates, installs, and removes launchd plist files in
-~/Library/LaunchAgents/ to schedule daily-start, daily-close,
-and prune-drafts commands.
+~/Library/LaunchAgents/ to schedule the morning/evening/weekly rituals
+and the weekly drafts gc.
+
+Deep-work guard: in_deep_work_window() reads knowledge/soul.md and
+returns True when the current local time falls inside the declared
+deep-work range. Cadence-triggered skills check this and suppress
+notifications when it returns True.
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, time
 from pathlib import Path
 from textwrap import dedent
 
@@ -31,13 +38,80 @@ SCHEDULES: dict[str, dict] = {
         "minute": 30,
         "weekdays": [1, 2, 3, 4, 5],
     },
-    "prune-drafts": {
-        "command": "prune-drafts",
+    "weekly-review": {
+        "command": "review",
+        "hour": 16,
+        "minute": 0,
+        "weekdays": [5],  # Friday (launchd: 1=Mon, 5=Fri)
+    },
+    "drafts-gc": {
+        "command": "drafts gc",
         "hour": 9,
         "minute": 0,
         "weekdays": [0],  # Sunday (launchd: 0=Sunday)
     },
 }
+
+# --- Deep-work guard --------------------------------------------------------
+
+_DEEP_WORK_LINE_RE = re.compile(
+    r"^\s*(?P<start>\d{1,2}:\d{2})\s*[-–—]\s*(?P<end>\d{1,2}:\d{2})"
+)
+
+
+def parse_deep_work_window(soul_section: str) -> tuple[time, time] | None:
+    """Parse a soul.md `Deep work hours` section into (start, end) times.
+
+    Returns None when the section is missing, empty, or unparseable. Only
+    the first matching `HH:MM-HH:MM` range on any line is used; timezone
+    text after the range is ignored (the cadence layer uses local time).
+    """
+    if not soul_section:
+        return None
+    for line in soul_section.splitlines():
+        m = _DEEP_WORK_LINE_RE.match(line)
+        if not m:
+            continue
+        try:
+            start = time.fromisoformat(_pad_hm(m.group("start")))
+            end = time.fromisoformat(_pad_hm(m.group("end")))
+        except ValueError:
+            continue
+        return start, end
+    return None
+
+
+def _pad_hm(value: str) -> str:
+    """Pad `H:MM` to `HH:MM` so time.fromisoformat accepts it."""
+    if ":" in value and len(value.split(":", 1)[0]) == 1:
+        return "0" + value
+    return value
+
+
+def in_deep_work_window(
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> bool:
+    """Return True if `now` is inside the user's declared deep-work window.
+
+    Reads `knowledge/soul.md`, looks for a `Deep work hours` section, and
+    parses the first `HH:MM-HH:MM` range. Returns False when soul.md is
+    missing, the section is absent, or the range is unparseable — fail-open
+    so a missing config doesn't accidentally silence the cadence.
+    """
+    from adzekit.preprocessor import load_soul
+
+    settings = settings or get_settings()
+    sections = load_soul(settings)
+    window = parse_deep_work_window(sections.get("Deep work hours", ""))
+    if window is None:
+        return False
+    start, end = window
+    current = (now or datetime.now()).time().replace(microsecond=0)
+    if start <= end:
+        return start <= current < end
+    # Crosses midnight (e.g. 22:00-02:00)
+    return current >= start or current < end
 
 
 def _find_adzekit() -> str:
@@ -75,7 +149,12 @@ def _generate_plist(
         args = [adzekit, "-m", "adzekit"]
     else:
         args = [adzekit]
-    args.extend(["--shed", str(shed_path), schedule["command"]])
+    args.extend(["--shed", str(shed_path)])
+    command = schedule["command"]
+    if isinstance(command, list):
+        args.extend(command)
+    else:
+        args.extend(command.split())
 
     args_xml = "\n        ".join(f"<string>{a}</string>" for a in args)
 
