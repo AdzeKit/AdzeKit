@@ -89,22 +89,64 @@ The "seamless" comes from three things:
 2. **One workspace, git-synced** — every machine has the same shed via `git clone` + `git pull`.
 3. **One skill spec, two execution profiles** — both adapters wrap the same `src/adzekit/skills/*.md`.
 
-## Open questions for the user
+## Locked decisions (answered 2026-05-22)
 
-1. **SOUL.md format compatibility**: Hermes has its own SOUL.md schema. Should AdzeKit's `knowledge/soul.md` conform to Hermes' schema (so the symlink works directly), or should the Hermes adapter translate on install? Need to read Hermes' SOUL.md docs before answering.
+1. **SOUL.md** — *Hermes translates.* AdzeKit defines its own `knowledge/soul.md` schema
+   (Voice / Values / Non-negotiables / Deep work hours). The Hermes adapter's install step
+   reads `knowledge/soul.md` and emits a Hermes-compatible SOUL.md into `~/.hermes/SOUL.md`.
+   Not a symlink — a translated copy. Re-translation hook: `adzekit adapter sync hermes`
+   (manual) and an optional file-watcher on `knowledge/soul.md` writes (auto, off by default).
 
-2. **Skill pack hosting**: agentskills.io is Hermes' community skill hub. Should AdzeKit's generic skills (capture, daily-start, weekly-review, inbox-triage, etc.) be published there as a pack? Or kept in the AdzeKit repo only?
+2. **Skill pack hosting** — *Publish to agentskills.io.* AdzeKit's generic core skills ship as
+   a Hermes skill pack via the adapter. New CLI: `adzekit adapter publish hermes` builds and
+   uploads the pack. Pack metadata lives in `adapters/hermes/pack.toml`.
 
-3. **Sessions and lineage**: Hermes' SQLite session DB tracks parent/child lineage across compressions. Does the AdzeKit adapter need to participate (e.g., draft frontmatter could include Hermes session ID), or is the daily-note-as-session-record sufficient (AdzeKit's existing model)?
+3. **Session lineage** — *Not in draft frontmatter; track at the daily-note level.* Hermes
+   session IDs do NOT appear in individual draft headers (drafts already carry a `parent:`
+   field for cross-draft lineage). Instead, each daily note gets a `> Sessions:` blockquote
+   footer that records every agent session that touched the shed that day:
+   ```markdown
+   > Sessions:
+   > - hermes:abc123 08:14-08:42 /daily-start -> drafts/daily-start-2026-05-22.md
+   > - hermes:def456 11:02-11:05 /capture
+   > - claude-code:session-7f3a 14:20-14:45 /weekly-review -> drafts/weekly-2026-W21.md
+   ```
+   This puts session lineage at the same granularity AdzeKit already uses for cognition (the
+   day). The Hermes adapter appends one line on each invocation; the Claude Code adapter does
+   the same with its own session ID format.
 
-4. **Shed-as-git-repo**: If the workspace is git-synced across machines, what's the conflict-resolution story when both machines write drafts at the same time? AdzeKit currently doesn't address this — it's a Phase 6+ concern.
+4. **Multi-machine git conflicts** — *Accept the friction; git is the resolution.* AdzeKit
+   does not build merge logic. Mitigations:
+   - Draft filenames carry a `-{HHMM}-{shortHostname}` suffix to minimize same-second
+     collisions: `drafts/daily-start-2026-05-22-0814-laptop.md`. The host suffix is the
+     first DNS label of `hostname`, sanitized to kebab-case.
+   - `drafts/INBOX.md` is the most conflict-prone file (append-heavy). The Phase 2 helper
+     `write_draft_with_frontmatter` appends with atomic file locks and tolerates rebase
+     fix-ups (lines reordered are still valid; duplicates get gc'd).
+   - Daily notes: same date on two machines = expected merge. Conventional resolution: keep
+     both `> Sessions:` lines, dedupe task list by content, append unique log entries.
 
-5. **Where does the personal computer get its secrets?** Hermes runs locally and needs LLM API keys. Are those in the user's shell env, in `~/.hermes/config`, or somewhere shared with the workspace? The shed can't hold secrets (git-synced), so this is a separate concern.
+5. **Secrets** — *Hermes' own config.* Never in the shed. `~/.hermes/config` on each machine
+   holds the LLM provider keys. Workspace is git-synced and public-domain-safe by design.
+   `.adzekit` config marker (in shed root) explicitly excludes any secret fields — a CI check
+   in the AdzeKit repo will reject secrets-shaped values committed to a shed-marker file.
 
-## Concretely deferred
+## What this unblocks
 
-- Building `adapters/hermes/` — defer until the Claude Code adapter is shipped and validated.
-- Hermes SOUL.md schema research — defer until Phase 3 (when AdzeKit's `knowledge/soul.md` is being designed).
-- agentskills.io publication — defer until generic core skills are stable and the pack format is clear.
+- Phase 1+ proceeds with full architectural clarity.
+- Draft filename schema gains `-{HHMM}-{host}` suffix (small but pervasive change; lands in
+  `write_draft_with_frontmatter` helper in Phase 2).
+- Daily-note schema gains a `> Sessions:` footer convention. Update `backbone-spec/schema.md`
+  when Phase 3 lands.
+- Build `adapters/hermes/` with confidence: SOUL.md translation, skill pack publication,
+  cadence install via Hermes cron, session-line append.
 
-For now, Phase 1 work proceeds as planned: author generic core skills with adapter-agnostic spec, then build the Claude Code adapter as the first execution profile. Every choice in Phase 1+ should be evaluated against "would this also work for the Hermes adapter?" If not, fix it now, not later.
+## Still deferred (now with clear reasons)
+
+- **Building `adapters/hermes/`** — defer until the Claude Code adapter is shipped and
+  validates the adapter contract. Hermes adapter copies the shape, doesn't invent it.
+- **agentskills.io publication** — defer until generic core skills are stable (Phase 1a
+  complete) and `adapters/hermes/pack.toml` schema is known.
+- **Conflict tooling** — wait for the user to actually encounter a multi-machine git
+  conflict in `drafts/`. If it never happens, don't build for it. If it happens often,
+  build minimal helpers then.
