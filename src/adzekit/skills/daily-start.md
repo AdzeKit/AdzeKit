@@ -56,16 +56,28 @@ Output goes to `{SHED}/drafts/daily-YYYY-MM-DD.md` for human review. The human m
    Ranking: overdue → due-today → tomorrow → carried. Size-weight: a single `L` or `XL` loop
    counts as 2 slots toward the cap.
 
-5. **Write the draft.** Create `{SHED}/drafts/daily-YYYY-MM-DD.md`:
+5. **Write the draft.** Create `{SHED}/drafts/daily-YYYY-MM-DD-HHMM-{host}.md` with the
+   four canonical sections:
    ```markdown
    # YYYY-MM-DD {Day of Week}
 
-   > Focus: {focus line from Step 4}
+   ## Triage
+   > Resolve each line before daily-close.
+   {triage lines: overdue loops, stale projects, stale bench — empty body if none}
 
+   ## Intention
    {task list from Step 4, one bullet per line}
+
+   ## Log
+
+   ## Reflection
+   - **Finished:**
+   - **Blocked:**
+   - **Tomorrow:**
    ```
-   No sections, no ceremony. A focus line and a short task list. Daily entries get appended
-   later via `/capture` or manual editing.
+   Always include all four headings, even when sections are empty. The structure is the
+   product — predictable layout is what makes the day scannable. Daily entries get
+   appended to `## Log` later via `/capture` or manual editing.
 
 6. **Scan for stale drafts.** Glob `{SHED}/drafts/*.md`. For each file, compute age in days
    from file modification time. If age > 3 days, add to stale list.

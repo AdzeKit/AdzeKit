@@ -250,7 +250,8 @@ def _build_triage_section(
 
     body = "\n".join(lines)
     section = (
-        "## Triage (must resolve before daily-close)\n"
+        "## Triage\n"
+        "> Resolve each line before daily-close.\n"
         f"{body}\n\n"
     )
     return section, len(lines)
@@ -349,16 +350,18 @@ def daily_start(
         if line in blurbs:
             annotated_tasks.append(blurbs[line])
 
-    # Format the note in existing section format
+    # Format the note with the four canonical sections.
     intention_block = "\n".join(annotated_tasks) if annotated_tasks else "- [ ] Top priority:"
+    if not triage_section:
+        triage_section = "## Triage\n\n"
     content = f"""# {iso} {weekday}
 
-{triage_section}## Morning: Intention
+{triage_section}## Intention
 {intention_block}
 
 ## Log
 
-## Evening: Reflection
+## Reflection
 - **Finished:**
 - **Blocked:**
 - **Tomorrow:**

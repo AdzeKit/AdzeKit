@@ -167,13 +167,15 @@ def create_daily_note(
 
     template = f"""# {iso} {weekday}
 
-## Morning: Intention
+## Triage
+
+## Intention
 - [ ] Top priority:
 - [ ] Close loop:
 
 ## Log
 
-## Evening: Reflection
+## Reflection
 - **Finished:**
 - **Blocked:**
 - **Tomorrow:**

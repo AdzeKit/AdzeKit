@@ -41,7 +41,7 @@ def test_today_creates_daily_note(tmp_path):
     today = date.today().isoformat()
     daily_path = target / "daily" / f"{today}.md"
     assert daily_path.exists()
-    assert "Morning: Intention" in daily_path.read_text()
+    assert "## Intention" in daily_path.read_text()
 
 
 def test_add_loop(tmp_path):

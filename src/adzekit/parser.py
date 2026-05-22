@@ -220,29 +220,47 @@ _BOLD_ITEM_RE = re.compile(r"^-\s+\*\*(\w+):\*\*\s*(.+)$")
 
 
 def parse_daily_note(text: str, note_date: date) -> DailyNote:
-    """Parse a daily note markdown file into a DailyNote object."""
+    """Parse a daily note markdown file into a DailyNote object.
+
+    Sections are recognized by canonical level-2 headings:
+      ## Triage       — pre-populated context (stale drafts, overdue loops, overnight signal)
+      ## Intention    — task list / what you intend to do
+      ## Log          — timestamped log entries
+      ## Reflection   — end-of-day reflection (Finished / Blocked / Tomorrow)
+
+    Legacy headings ("## Morning: Intention", "## Evening: Reflection") are
+    accepted for backward compatibility so existing daily notes still parse.
+    """
     intentions: list[Task] = []
     log: list[LogEntry] = []
     finished: list[str] = []
     blocked: list[str] = []
     tomorrow: list[str] = []
+    triage: list[str] = []
 
     section = ""
     for line in text.split("\n"):
         stripped = line.strip()
 
         lower = stripped.lower()
-        if "morning" in lower and "intention" in lower:
+        if lower == "## triage":
+            section = "triage"
+            continue
+        elif lower == "## intention" or ("morning" in lower and "intention" in lower):
             section = "intention"
             continue
         elif lower.startswith("## log") or lower == "## log":
             section = "log"
             continue
-        elif "evening" in lower and "reflection" in lower:
+        elif lower == "## reflection" or ("evening" in lower and "reflection" in lower):
             section = "reflection"
             continue
 
-        if section == "intention":
+        if section == "triage":
+            if stripped:
+                triage.append(stripped)
+
+        elif section == "intention":
             m = _TASK_RE.match(stripped)
             if m:
                 intentions.append(Task(description=m.group(2), done=m.group(1).lower() == "x"))
@@ -271,5 +289,6 @@ def parse_daily_note(text: str, note_date: date) -> DailyNote:
         finished=finished,
         blocked=blocked,
         tomorrow=tomorrow,
+        triage=triage,
         raw_content=text,
     )

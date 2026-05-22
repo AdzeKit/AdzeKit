@@ -89,31 +89,49 @@ All files are UTF-8 Markdown. No proprietary formats, no YAML frontmatter.
 
 **Path:** `daily/YYYY-MM-DD.md`
 
-One file per calendar day.
+One file per calendar day. Four canonical sections, always in this order:
 
 ```markdown
-# 2026-04-09 Wednesday
+# 2026-05-22 Friday
 
-> Focus: finish ARC batch sizing, review knowledge patch
+## Triage
+> Resolve each line before daily-close.
+- [ ] OVERDUE 12d: Manulife KARL POC ticket → kill / defer / promote
+- [ ] STALE 9d: aer-compliance → kill / defer / commit
 
-- [ ] (S) [2026-04-09] Get ARC an answer on batch inference costs <- due today
-- [ ] (XS) [2026-04-07] Work AI Gateway data privacy talking point <- carried
+## Intention
+- [ ] (S) [2026-05-22] Get ARC an answer on batch inference costs <- due today
+- [ ] (XS) [2026-05-20] Work AI Gateway data privacy talking point <- carried
 
+## Log
 - 09:00 Started ARC batch pricing research
 - 10:30 Call with @alice re: MLflow migration timeline
 - [x] (S) Responded to @bob on vector search sizing
 - 14:00 Deep work: Model Lens feature store integration
 
-> End: Energy 3/5. 1 done, 1 open. Tomorrow: finish ARC sizing.
+## Reflection
+- **Finished:** ARC sizing summary, vector-search reply
+- **Blocked:** waiting on MLflow team's response
+- **Tomorrow:** finish AI Gateway talking point
+
+> End: Energy 3/5. 1 done, 1 open. Tomorrow: finish AI Gateway talking point.
+
+> Sessions:
+> - claude-code:7f3a 07:30-07:34 /daily-start -> drafts/daily-start-2026-05-22-0730-laptop.md
+> - claude-code:8e22 14:00-14:18 /capture
 ```
 
-**Structure:**
-- `> Focus:` — blockquote bookend. 2-3 word focus from yesterday's Tomorrow or top loop.
-- Task list — proposed intentions, max 5 items.
-- Log entries — timestamped bullets, appended throughout the day via `/log` or manual editing. Completed loops inline as `- [x]`.
-- `> End:` — blockquote bookend. Energy score, done/open count, tomorrow items.
+### Sections
 
-The bookends replace formal sections. They're faster to write and scan.
+- **`## Triage`** — pre-populated context that *must* be resolved before daily-close. Overdue loops, stale projects, stale bench items. Each line is a one-decision question: kill / defer / promote / commit / keep / drop. Always present; empty body when nothing needs triage.
+- **`## Intention`** — proposed intentions for the day, max 5 items. Carries from yesterday's Tomorrow line + open loops. WIP cap applies here only.
+- **`## Log`** — timestamped bullets appended throughout the day via `/capture` or manual editing. Completed loops inline as `- [x]`.
+- **`## Reflection`** — end-of-day summary: Finished / Blocked / Tomorrow. Filled at daily-close (or by hand).
+
+### Bookends and footers
+
+- `> End:` blockquote line — appended by daily-close. Energy score, done/open counts, tomorrow suggestion. The presence of `> End:` is how daily-close detects an already-closed day.
+- `> Sessions:` blockquote footer — optional. Adapters append one line per agent invocation that touched the shed. See the per-runtime mapping below.
 
 ## Loops
 

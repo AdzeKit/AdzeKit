@@ -150,7 +150,7 @@ class LogEntry:
 
 @dataclass
 class DailyNote:
-    """A single day's note with morning intentions, log, and reflection."""
+    """A single day's note with four sections: Triage, Intention, Log, Reflection."""
 
     date: date
     intentions: list[Task] = field(default_factory=list)
@@ -158,4 +158,5 @@ class DailyNote:
     finished: list[str] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
     tomorrow: list[str] = field(default_factory=list)
+    triage: list[str] = field(default_factory=list)
     raw_content: str = ""
