@@ -197,6 +197,86 @@ def cmd_prune_drafts(args: argparse.Namespace) -> None:
         print(f"\n{len(deleted)} draft(s) pruned.")
 
 
+# -- drafts (accept/dismiss/gc/list) ---------------------------------------
+
+
+def cmd_drafts(args: argparse.Namespace) -> None:
+    """Dispatch the `drafts` subcommand."""
+    sub = getattr(args, "drafts_command", None)
+    if sub is None:
+        # Default: list pending drafts in INBOX
+        _drafts_list(args)
+        return
+    sub(args)
+
+
+def _drafts_list(args: argparse.Namespace) -> None:
+    from adzekit.modules.drafts import parse_inbox
+
+    settings = _resolve_settings(args)
+    entries = parse_inbox(settings)
+    if not entries:
+        print("INBOX is empty.")
+        return
+    for e in entries:
+        prefix = "[x]" if e.state.lower() == "x" else "[ ]"
+        summary = f" · {e.summary}" if e.summary else ""
+        print(f"  {e.index:>3}. {prefix} {e.date} {e.time} {e.skill}{summary}  ({e.path})")
+
+
+def _drafts_accept(args: argparse.Namespace) -> None:
+    from adzekit.modules.drafts import (
+        InboxEntryNotFoundError,
+        InboxNotFoundError,
+        accept_draft,
+    )
+
+    settings = _resolve_settings(args)
+    try:
+        target_override = Path(args.to).expanduser().resolve() if args.to else None
+        promoted, original = accept_draft(
+            args.index,
+            settings=settings,
+            target=target_override,
+            preserve_original=not args.no_preserve,
+        )
+    except (InboxNotFoundError, InboxEntryNotFoundError, FileNotFoundError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"Accepted #{args.index} -> {promoted}")
+    if original.name:
+        print(f"  original preserved at {original}")
+
+
+def _drafts_dismiss(args: argparse.Namespace) -> None:
+    from adzekit.modules.drafts import (
+        InboxEntryNotFoundError,
+        InboxNotFoundError,
+        dismiss_draft,
+    )
+
+    settings = _resolve_settings(args)
+    try:
+        archived = dismiss_draft(args.index, settings=settings)
+    except (InboxNotFoundError, InboxEntryNotFoundError, FileNotFoundError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"Dismissed #{args.index} -> {archived}")
+
+
+def _drafts_gc(args: argparse.Namespace) -> None:
+    from adzekit.modules.drafts import gc_drafts
+
+    settings = _resolve_settings(args)
+    archived = gc_drafts(days=args.days, settings=settings)
+    if not archived:
+        print("No stale drafts to gc.")
+        return
+    for p in archived:
+        print(f"  archived: {p.name}")
+    print(f"\n{len(archived)} draft(s) gc'd.")
+
+
 # -- automate --------------------------------------------------------------
 
 
@@ -883,6 +963,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate .vscode/adzekit.code-snippets for Cursor autocomplete.",
     )
     p_tags.set_defaults(func=cmd_tags)
+
+    # drafts (subcommand group)
+    p_drafts = sub.add_parser("drafts", help="Review and promote drafts from INBOX.")
+    p_drafts.set_defaults(func=cmd_drafts, drafts_command=None)
+    p_drafts_sub = p_drafts.add_subparsers(dest="drafts_subcommand")
+
+    p_drafts_list = p_drafts_sub.add_parser("list", help="List pending drafts in INBOX.")
+    p_drafts_list.set_defaults(func=cmd_drafts, drafts_command=_drafts_list)
+
+    p_drafts_accept = p_drafts_sub.add_parser(
+        "accept",
+        help="Promote draft #N from INBOX to its backbone location.",
+    )
+    p_drafts_accept.add_argument("index", type=int, help="1-based INBOX entry index.")
+    p_drafts_accept.add_argument(
+        "--to",
+        default=None,
+        help="Override the destination directory (default: per-skill heuristic).",
+    )
+    p_drafts_accept.add_argument(
+        "--no-preserve",
+        action="store_true",
+        help="Skip preserving the original draft in drafts/archive/originals/.",
+    )
+    p_drafts_accept.set_defaults(func=cmd_drafts, drafts_command=_drafts_accept)
+
+    p_drafts_dismiss = p_drafts_sub.add_parser(
+        "dismiss",
+        help="Discard draft #N: move to drafts/archive/.",
+    )
+    p_drafts_dismiss.add_argument("index", type=int, help="1-based INBOX entry index.")
+    p_drafts_dismiss.set_defaults(func=cmd_drafts, drafts_command=_drafts_dismiss)
+
+    p_drafts_gc = p_drafts_sub.add_parser(
+        "gc",
+        help="Archive drafts older than N days and clean INBOX entries.",
+    )
+    p_drafts_gc.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help="Age threshold in days (default: stale_draft_days from .adzekit).",
+    )
+    p_drafts_gc.set_defaults(func=cmd_drafts, drafts_command=_drafts_gc)
 
     # prune-drafts
     p_pd = sub.add_parser("prune-drafts", help="Delete stale draft files.")
