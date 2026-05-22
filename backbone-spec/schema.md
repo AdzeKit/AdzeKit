@@ -24,6 +24,8 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
     archive/
       <slug>.md
   knowledge/
+    soul.md                   # voice / values / non-negotiables / deep-work hours
+    role-context.md           # facts (priority channels, identity, interests)
     <slug>.md
   reviews/
     YYYY-WNN.md
@@ -36,7 +38,13 @@ A short, versioned contract. Any folder that conforms to this spec is an AdzeKit
   stock/                      # git-ignored, synced via rclone
     <project-slug>/
   drafts/                     # git-ignored, agent-writable
-    <any file>
+    INBOX.md                  # protocol queue: one line per pending draft
+    <skill>-YYYY-MM-DD-HHMM-<host>.md  # filename schema with host suffix
+    archive/                  # accepted/dismissed/gc'd drafts
+      originals/              # originals preserved on accept (distill input)
+    skill-proposals/          # /distill output: proposed new skills
+    knowledge/                # per-entity capture drafts from /slack-capture
+    <any other file>
 ```
 
 ## Access Zones
@@ -286,6 +294,34 @@ Tag types distinguish themselves naturally:
 - Clients: `#acme`
 - References: `#AR-000109761`
 
+## Soul
+
+**Path:** `knowledge/soul.md`
+
+The shed's voice file. Contains voice, values, non-negotiables, and declared deep-work hours. Adapters load this file on every skill invocation. Human writes it; agents only read it.
+
+```markdown
+# Soul
+
+## Voice
+- Direct. No throat-clearing.
+- Markdown over prose; tables over bullets when comparing.
+- Cite files by path when proposing edits.
+
+## Values
+- Honest disagreement > polite agreement.
+- Default to opinionated; soften only when asked.
+
+## Non-negotiables
+- Never write to backbone/ — propose to drafts/.
+- Deep work hours are silent — no notifications during the declared window.
+
+## Deep work hours
+09:00-11:00 America/Edmonton
+```
+
+Sections are parsed by level-2 headings (`## Section Name`). Adapters may translate `Deep work hours` into runtime-specific scheduling (Hermes adapter writes a Hermes SOUL.md; cadence layer respects the window). The schema is *suggested*, not enforced — extra sections are ignored, missing sections produce empty values.
+
 ## Stock
 
 **Path:** `stock/<project-slug>/`
@@ -298,9 +334,88 @@ Raw materials — transcripts, PDFs, recordings. Git-ignored, synced via rclone.
 
 Agent proposals awaiting human review. Git-ignored, ephemeral.
 
-**Batch patch pattern:** Skills producing many proposals consolidate into a single patch file (`drafts/<skill>-patch-YYYY-MM-DD.md`) with per-file drafts and `cp` commands. One file to review, batch decisions to make.
+### Filename schema
 
-**Watermarks:** `drafts/<skill>-watermark.md` tracks latest processed timestamp per source. Delete to force rescan.
+```
+drafts/{skill}-YYYY-MM-DD-HHMM-{host}.md
+```
+
+The HHMM and host suffix minimize multi-machine git collisions when the shed is synced across devices. `{host}` is the first DNS label of `hostname`, sanitized to kebab-case (lowercase, only `[a-z0-9-]`).
+
+### Provenance header
+
+Every draft begins with an HTML-comment header — parseable but non-rendering, so it doesn't violate the `no YAML in backbone` rule (drafts are workbench, not backbone, but the comment form is friendlier to readers).
+
+```
+<!-- adzekit-draft
+skill: inbox-triage
+triggered: 2026-05-22T08:14:03-06:00
+trigger: cron|user|manual
+host: laptop
+inputs:
+  - knowledge/soul.md@a1b2c3d
+  - loops/open.md@e4f5a6b
+parent: drafts/inbox-triage-2026-05-21-0814-laptop.md
+confidence: 0.85
+summary: 14 emails, 3 reply drafts
+hash: sha256:7f3a...
+-->
+```
+
+- `inputs` lists relpath-from-shed with the short git SHA at read time (when available).
+- `parent` links to the prior draft from the same skill, for lineage.
+- `hash` is `sha256:` + first 16 hex chars of the body content — reproducibility witness.
+- `confidence` (0.0–1.0) is optional; high-confidence drafts qualify for `adzekit drafts accept --auto`.
+
+### INBOX queue
+
+**Path:** `drafts/INBOX.md`
+
+A single auto-maintained file listing every pending draft, one line per draft.
+
+```markdown
+# Draft Inbox
+
+- [ ] 2026-05-22 08:14 inbox-triage · 14 emails, 3 reply drafts · `drafts/inbox-triage-2026-05-22-0814-laptop.md`
+- [ ] 2026-05-22 07:30 daily-start · focus + 3 carried loops · `drafts/daily-start-2026-05-22-0730-laptop.md`
+```
+
+Mirrors the `loops/open.md` ↔ `loops/closed.md` pattern. Manipulated via:
+- `adzekit drafts list` — show pending entries
+- `adzekit drafts accept N` — promote draft #N to backbone; preserve original to `drafts/archive/originals/`
+- `adzekit drafts dismiss N` — move draft #N to `drafts/archive/`
+- `adzekit drafts gc` — archive stale drafts and clean orphan INBOX lines
+
+### Archive
+
+**Path:** `drafts/archive/`
+
+Accepted, dismissed, or gc'd drafts. `drafts/archive/originals/` preserves the agent-emitted draft *before* any human edits at promotion time — the `/distill` skill reads this directory to detect repeated edit patterns and propose new skills.
+
+### Other workbench paths
+
+- `drafts/skill-proposals/` — output of `/distill`. Proposed new skills awaiting human review.
+- `drafts/knowledge/<entity-slug>.md` — per-entity capture drafts from `/slack-capture`.
+- `drafts/<skill>-watermark.md` — latest processed timestamp per source. Delete to force rescan.
+
+### Batch patch pattern (legacy)
+
+Skills producing many proposals may consolidate into a single patch file (`drafts/<skill>-patch-YYYY-MM-DD.md`) with per-file drafts and `cp` commands. The INBOX queue largely supersedes this pattern; new skills should emit a single review report instead.
+
+## Daily-Note Session Footer (optional)
+
+Daily notes accumulate a `> Sessions:` blockquote footer that records every agent session which touched the shed that day. The Hermes adapter writes Hermes session IDs; the Claude Code adapter writes Claude Code session identifiers. This is the *only* persistent record of agent activity at the day level.
+
+```markdown
+> End: ...
+
+> Sessions:
+> - hermes:abc123 08:14-08:42 /daily-start -> drafts/daily-start-2026-05-22-0814-laptop.md
+> - hermes:def456 11:02-11:05 /capture
+> - claude-code:session-7f3a 14:20-14:45 /weekly-review -> drafts/weekly-2026-W21-laptop.md
+```
+
+Adapters append one line on each invocation. The line format is `- <runtime>:<session-id> <start>-<end> /<skill>[ -> <draft-path>]`. Optional, but recommended for users who want session-level traceability without per-draft session pollution.
 
 ## What This Spec Does Not Cover
 
