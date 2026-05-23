@@ -384,6 +384,178 @@ def dismiss_draft(
     return final_dest
 
 
+def show_draft(
+    index: int,
+    *,
+    settings: Settings | None = None,
+    include_frontmatter: bool = False,
+) -> dict:
+    """Return the body and provenance summary of draft #index.
+
+    Preview a draft before accepting or dismissing — without it the user
+    has to `cat` the draft path by hand. Default strips the
+    `<!-- adzekit-draft -->` header; pass include_frontmatter=True to keep it.
+
+    Returns a dict with `path`, `skill`, `summary`, `confidence`, `triggered`,
+    `body`, and the InboxEntry's basic fields.
+    """
+    settings = settings or get_settings()
+    entries = parse_inbox(settings)
+    entry = next((e for e in entries if e.index == index), None)
+    if entry is None:
+        raise InboxEntryNotFoundError(f"No INBOX entry at index {index}")
+
+    src = entry.as_path(settings)
+    if not src.exists():
+        raise FileNotFoundError(f"Draft referenced by INBOX is missing: {src}")
+
+    from adzekit.preprocessor import read_draft_frontmatter, strip_draft_frontmatter
+    fm = read_draft_frontmatter(src)
+    body = src.read_text(encoding="utf-8") if include_frontmatter else strip_draft_frontmatter(src)
+
+    return {
+        "index": index,
+        "path": str(src),
+        "skill": entry.skill,
+        "summary": entry.summary,
+        "date": entry.date,
+        "time": entry.time,
+        "triggered": fm.get("triggered", ""),
+        "confidence": fm.get("confidence", ""),
+        "hash": fm.get("hash", ""),
+        "inputs": fm.get("inputs", []) if isinstance(fm.get("inputs"), list) else [],
+        "body": body,
+    }
+
+
+def rollback_draft(
+    *,
+    settings: Settings | None = None,
+    filename: str | None = None,
+) -> dict:
+    """Undo a recent `accept_draft` by restoring the original from archive.
+
+    Looks up the most-recently-accepted draft (or a specific one by
+    `filename`) in `drafts/archive/originals/`, restores it to `drafts/`,
+    re-creates the INBOX sidecar entry, and removes the promoted copy
+    from its backbone destination if it still has the exact same body
+    as what we promoted (defensive against the user already editing it).
+
+    Returns a dict with `restored` (path the original was put back at),
+    `removed_from_backbone` (the path it was moved out of, or None when
+    the backbone copy had diverged and was left alone), and `inbox_entry`
+    (path of the new sidecar).
+
+    Raises FileNotFoundError if no eligible original is found.
+    """
+    settings = settings or get_settings()
+    originals_dir = settings.drafts_dir / "archive" / "originals"
+    if not originals_dir.is_dir():
+        raise FileNotFoundError(
+            f"No originals archive at {originals_dir}; "
+            "nothing to roll back. Were originals preserved on accept?"
+        )
+
+    # Find the candidate original.
+    if filename is not None:
+        candidate = originals_dir / filename
+        if not candidate.exists():
+            raise FileNotFoundError(
+                f"No archived original at {candidate}. List with: "
+                f"ls {originals_dir}"
+            )
+    else:
+        originals = sorted(
+            (p for p in originals_dir.glob("*.md") if p.is_file()),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not originals:
+            raise FileNotFoundError(
+                f"No archived originals in {originals_dir}; "
+                "nothing to roll back."
+            )
+        candidate = originals[0]
+
+    # Restore the original draft to drafts/ root.
+    restored = settings.drafts_dir / candidate.name
+    if restored.exists():
+        raise FileExistsError(
+            f"Cannot restore: a draft already exists at {restored}. "
+            "Inspect, dismiss, or rename the conflicting draft first."
+        )
+    restored.write_text(candidate.read_text(encoding="utf-8"), encoding="utf-8")
+
+    # Try to remove the promoted copy from the backbone. We parse the skill
+    # from the original's frontmatter to know which dir it was promoted to.
+    from adzekit.preprocessor import (
+        read_draft_frontmatter,
+        strip_draft_frontmatter,
+    )
+    fm = read_draft_frontmatter(restored)
+    skill = str(fm.get("skill", "")).strip() or _filename_skill_hint(candidate.name)
+    backbone_dir = _resolve_promotion_target(skill, None, settings)
+    backbone_copy = backbone_dir / candidate.name
+    removed_from_backbone: Path | None = None
+    if backbone_copy.exists():
+        # Only remove if the backbone body matches what we promoted (i.e. the
+        # user hasn't edited it post-accept). Comparing the promoted body to
+        # the original-with-frontmatter-stripped is the safe check.
+        original_promoted_body = strip_draft_frontmatter(candidate)
+        backbone_body = backbone_copy.read_text(encoding="utf-8")
+        if backbone_body == original_promoted_body:
+            backbone_copy.unlink()
+            removed_from_backbone = backbone_copy
+        # If diverged, leave the backbone copy alone — the user has invested
+        # edits we shouldn't blow away. The restored draft becomes the
+        # "in-progress alternative" until the user decides.
+
+    # Re-create the INBOX sidecar.
+    inbox_d = settings.drafts_dir / "INBOX.d"
+    inbox_d.mkdir(parents=True, exist_ok=True)
+    stem = candidate.stem
+    sidecar = inbox_d / f"{stem}.entry"
+    # Reconstruct an INBOX line from frontmatter data.
+    triggered = str(fm.get("triggered", ""))
+    if triggered:
+        # `triggered` is an ISO timestamp; convert to the INBOX human format.
+        from datetime import datetime
+        try:
+            ts = datetime.fromisoformat(triggered)
+            human_time = ts.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            human_time = ""
+    else:
+        human_time = ""
+    summary = str(fm.get("summary", ""))
+    summary_part = f" · {summary}" if summary else ""
+    line = (
+        f"- [ ] {human_time} {skill}{summary_part} · `drafts/{candidate.name}`\n"
+    )
+    sidecar.write_text(line, encoding="utf-8")
+    from adzekit.preprocessor import _regenerate_inbox_view
+    _regenerate_inbox_view(settings)
+
+    # Remove the original from archive — once restored it's no longer "archived".
+    candidate.unlink()
+
+    return {
+        "restored": str(restored),
+        "removed_from_backbone": str(removed_from_backbone) if removed_from_backbone else None,
+        "inbox_entry": str(sidecar),
+    }
+
+
+def _filename_skill_hint(filename: str) -> str:
+    """Best-effort skill name extraction from the draft filename schema.
+
+    Filenames look like `{skill}-YYYY-MM-DD-HHMMSS-{host}[-N].md`. The skill
+    portion may itself contain hyphens. We take everything before the date.
+    """
+    m = re.match(r"^(.+?)-\d{4}-\d{2}-\d{2}", filename)
+    return m.group(1) if m else ""
+
+
 def gc_drafts(
     days: int | None = None,
     *,

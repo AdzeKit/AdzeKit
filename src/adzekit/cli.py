@@ -277,6 +277,60 @@ def _drafts_gc(args: argparse.Namespace) -> None:
     print(f"\n{len(archived)} draft(s) gc'd.")
 
 
+def _drafts_show(args: argparse.Namespace) -> None:
+    from adzekit.modules.drafts import (
+        InboxEntryNotFoundError,
+        show_draft,
+    )
+
+    settings = _resolve_settings(args)
+    try:
+        result = show_draft(
+            args.index,
+            settings=settings,
+            include_frontmatter=args.with_frontmatter,
+        )
+    except (InboxEntryNotFoundError, FileNotFoundError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    # Compact provenance summary, then the body.
+    print(f"draft #{result['index']} — {result['path']}")
+    print(f"  skill:      {result['skill']}")
+    if result["summary"]:
+        print(f"  summary:    {result['summary']}")
+    if result["triggered"]:
+        print(f"  triggered:  {result['triggered']}")
+    if result["confidence"]:
+        print(f"  confidence: {result['confidence']}")
+    if result["inputs"]:
+        print(f"  inputs:     {', '.join(result['inputs'])}")
+    print()
+    print(result["body"].rstrip("\n"))
+
+
+def _drafts_rollback(args: argparse.Namespace) -> None:
+    from adzekit.modules.drafts import rollback_draft
+
+    settings = _resolve_settings(args)
+    try:
+        result = rollback_draft(
+            settings=settings,
+            filename=args.filename,
+        )
+    except (FileNotFoundError, FileExistsError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"Restored draft: {result['restored']}")
+    print(f"  INBOX entry:  {result['inbox_entry']}")
+    if result["removed_from_backbone"]:
+        print(f"  Removed from backbone: {result['removed_from_backbone']}")
+    else:
+        print(
+            "  Note: backbone copy was either absent or edited since accept; "
+            "left alone. Inspect manually and remove if desired."
+        )
+
+
 # -- adapter ---------------------------------------------------------------
 
 
@@ -345,8 +399,15 @@ def cmd_adapter(args: argparse.Namespace) -> None:
             soul_marker = "✓" if result["soul_translated"] else "✗"
             print(f"  {soul_marker} SOUL.md:    {result['soul_path']}")
         elif args.action == "sync":
-            direction = getattr(args, "direction", "both")
-            result = sync_hermes(_resolve_settings(args), direction=direction)
+            from adzekit.modules.adapters_hermes import HermesExportNotImplementedError
+            # Default direction post-B is push-only; pull raises until Hermes
+            # ships an export schema.
+            direction = getattr(args, "direction", None) or "push"
+            try:
+                result = sync_hermes(_resolve_settings(args), direction=direction)
+            except HermesExportNotImplementedError as exc:
+                print(f"pull: not implemented\n  {exc}", file=sys.stderr)
+                raise SystemExit(2)
             if "push" in result:
                 push = result["push"]
                 if push.get("pushed"):
@@ -354,13 +415,6 @@ def cmd_adapter(args: argparse.Namespace) -> None:
                     print(f"  knowledge files: {len(push['files'])}")
                 else:
                     print(f"push: skipped ({push.get('reason')})")
-            if "pull" in result:
-                pull = result["pull"]
-                if pull.get("pulled"):
-                    print(f"pull: proposal at {pull['draft']}")
-                    print(f"  source: {pull['src']}")
-                else:
-                    print(f"pull: skipped ({pull.get('reason')})")
     else:
         print(f"Unknown adapter: {name}", file=sys.stderr)
         raise SystemExit(2)
@@ -1151,6 +1205,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Age threshold in days (default: stale_draft_days from .adzekit).",
     )
     p_drafts_gc.set_defaults(func=cmd_drafts, drafts_command=_drafts_gc)
+
+    p_drafts_show = p_drafts_sub.add_parser(
+        "show",
+        help="Preview the body and provenance of draft #N before accepting.",
+    )
+    p_drafts_show.add_argument("index", type=int, help="1-based INBOX entry index.")
+    p_drafts_show.add_argument(
+        "--with-frontmatter",
+        action="store_true",
+        help="Include the `<!-- adzekit-draft -->` header in the output.",
+    )
+    p_drafts_show.set_defaults(func=cmd_drafts, drafts_command=_drafts_show)
+
+    p_drafts_rollback = p_drafts_sub.add_parser(
+        "rollback",
+        help="Undo a recent `accept` by restoring the original from drafts/archive/originals/.",
+    )
+    p_drafts_rollback.add_argument(
+        "--filename",
+        default=None,
+        help="Specific archived original to restore (default: most recently accepted).",
+    )
+    p_drafts_rollback.set_defaults(func=cmd_drafts, drafts_command=_drafts_rollback)
 
     # prune-drafts
     p_pd = sub.add_parser("prune-drafts", help="Delete stale draft files.")
