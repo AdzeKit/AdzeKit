@@ -36,13 +36,44 @@ adzekit status                     # Shed health at a glance
 adzekit sweep                      # Archive completed loops
 
 adzekit drafts list                # Review pending agent proposals
+adzekit drafts show 1              # Preview body + provenance of draft #1
 adzekit drafts accept 1            # Promote draft #1 to backbone
 adzekit drafts dismiss 2           # Discard draft #2
+adzekit drafts rollback            # Undo the most recent accept
 adzekit drafts gc                  # Archive stale drafts
 
 adzekit graph build                # Compile the knowledge graph
 adzekit graph orphans              # Find unlinked knowledge notes
+
+adzekit cadence install            # Schedule morning/evening/weekly rituals
+adzekit cadence status             # Verify plists are loaded into launchd
 ```
+
+### Flag precedence
+
+The shed path is resolved in priority order:
+
+1. `--shed <path>` (command-line flag, wins over everything)
+2. `ADZEKIT_SHED=<path>` environment variable
+3. `~/.config/adzekit/config` (written by `adzekit set-shed`)
+4. `~/adzekit` (default)
+
+The `.adzekit` marker file in the shed root signals "this is a shed";
+operating on a directory without one prints a helpful init hint.
+
+### Cadence (always-on rituals)
+
+```bash
+adzekit cadence install      # daily-start 07:30 + daily-close 17:30 +
+                             # weekly-review Fri 16:00 + drafts-gc Sun 09:00
+adzekit cadence status       # file-on-disk vs loaded-into-launchd per plist
+adzekit cadence uninstall    # remove all four plists
+```
+
+The cadence layer respects the deep-work window declared in
+`knowledge/soul.md`. During the window, triggered skills write drafts
+silently and suppress notifications until the window closes. See
+[Philosophy: Protect Deep Work](docs/philosophy.md).
 
 ## Eight Principles
 

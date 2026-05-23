@@ -1,20 +1,25 @@
-"""Hermes adapter: skill pack + SOUL.md translator + cron installer.
+"""Hermes adapter: skill pack + SOUL.md + knowledge bridge.
 
-Per the locked Hermes-integration decisions:
-  1. AdzeKit owns knowledge/soul.md schema; Hermes adapter translates on
-     install to ~/.hermes/SOUL.md.
-  2. Skills are bundled as a Hermes skill pack at adapters/hermes/pack/
-     and (when Hermes is detected on disk) mirrored into
-     ~/.hermes/skills/adzekit/.
-  3. Session lineage flows through daily-note > Sessions: footers, not
-     draft frontmatter.
-  4. Multi-machine git conflicts are accepted; the -HHMM-host suffix in
-     draft filenames minimizes them.
-  5. Secrets live in Hermes' own config, never in the shed.
+Rebuilt in the Phase B audit against verified Hermes facts (Nous Research,
+hermes-agent v0.14.0):
 
-This module is deliberately conservative about touching Hermes itself —
-when Hermes isn't installed locally, the pack is staged but not loaded.
-The user copies the staged pack into ~/.hermes/skills/ when they're ready.
+  - Hermes' SOUL.md has no schema; the whole file is the soul. The adapter
+    concatenates `knowledge/soul.md` + `knowledge/role-context.md` (with a
+    header comment) and emits a plain markdown file.
+
+  - Hermes' skills live at `~/.hermes/skills/<category>/<skill-name>/SKILL.md`
+    with YAML frontmatter per the agentskills.io standard. AdzeKit's
+    "category" is `adzekit`, and each core skill becomes
+    `~/.hermes/skills/adzekit/<skill>/SKILL.md`. No pack.toml — that wasn't
+    a Hermes concept.
+
+  - Hermes provides no documented export schema for "what the agent learned
+    about you" today. The previous pull direction silently no-op'd against
+    a non-existent path; it now raises NotImplementedError pointing at
+    Hermes' Honcho integration as the place to wire that up when it ships.
+
+Cron and MCP-config sync are deferred: they require Hermes installed locally
+to validate end-to-end. Nothing breaks today without them.
 """
 
 from __future__ import annotations
@@ -24,7 +29,6 @@ from pathlib import Path
 from typing import Any
 
 from adzekit.config import Settings, get_settings
-from adzekit.preprocessor import load_soul
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 HERMES_PACK_DIR = _REPO_ROOT / "adapters" / "hermes" / "pack"
@@ -36,12 +40,6 @@ HERMES_SKILLS_DIR = HERMES_HOME / "skills" / "adzekit"
 HERMES_CONTEXTS_DIR = HERMES_HOME / "contexts"
 HERMES_KNOWLEDGE_CONTEXT = HERMES_CONTEXTS_DIR / "adzekit-knowledge.md"
 
-# Path Hermes' export integration (when it exists) writes user-inferred
-# facts to. Today this is a placeholder — Hermes doesn't currently publish
-# a stable export schema. The pull direction reads this file when present
-# and produces draft proposals from it.
-HERMES_INFERRED_EXPORT = HERMES_HOME / "exports" / "user-inferences.md"
-
 
 # --- SOUL.md translation ----------------------------------------------------
 
@@ -51,113 +49,143 @@ def translate_soul_to_hermes(
     *,
     dest: Path | None = None,
 ) -> Path | None:
-    """Read knowledge/soul.md and emit a Hermes-compatible SOUL.md.
+    """Concat soul.md + role-context.md into a Hermes-compatible SOUL.md.
 
-    Returns the destination path on success, or None when knowledge/soul.md
-    is missing. When ``dest`` is None and ~/.hermes/ doesn't exist, writes
-    to the staged pack dir instead so the translation isn't lost.
+    Hermes treats the whole file as the agent's soul — no schema, no
+    section parsing. The adapter therefore preserves the source content
+    verbatim and only adds a small generated header noting provenance.
 
-    Hermes' SOUL.md schema isn't formally published; we use a reasonable
-    superset that Hermes can read (it parses markdown loosely) and that
-    preserves the original AdzeKit sections verbatim. The translation is
-    additive — no information is dropped.
+    Returns the destination path on success, or None when both source
+    files are missing. When `dest` is None and `~/.hermes/` doesn't
+    exist, the file is staged at `adapters/hermes/pack/SOUL.md`.
     """
     settings = settings or get_settings()
-    sections = load_soul(settings)
-    if not sections:
+    soul_src = settings.knowledge_dir / "soul.md"
+    role_src = settings.knowledge_dir / "role-context.md"
+
+    parts: list[str] = []
+    if soul_src.exists():
+        parts.append(soul_src.read_text(encoding="utf-8").rstrip())
+    if role_src.exists():
+        parts.append(role_src.read_text(encoding="utf-8").rstrip())
+    if not parts:
         return None
 
-    lines = [
-        "# SOUL",
-        "",
-        "_Generated from AdzeKit `knowledge/soul.md` by `adzekit adapter install hermes`._",
-        "_Edit the AdzeKit source and re-run install; this file is overwritten._",
-        "",
-    ]
-    # Standard sections in a canonical order; unknown sections appended after.
-    canonical = ["Voice", "Values", "Non-negotiables", "Deep work hours"]
-    seen: set[str] = set()
-    for name in canonical:
-        if name in sections:
-            lines.append(f"## {name}")
-            lines.append("")
-            lines.append(sections[name])
-            lines.append("")
-            seen.add(name)
-    for name, body in sections.items():
-        if name in seen:
-            continue
-        lines.append(f"## {name}")
-        lines.append("")
-        lines.append(body)
-        lines.append("")
+    body = "\n\n".join(parts)
 
-    # Hermes-specific hint: surface the deep-work window as a top-level
-    # directive Hermes can read for its own scheduler-gating logic.
-    if "Deep work hours" in sections:
-        lines.append("## Hermes hints")
-        lines.append("")
-        lines.append(
-            "When my declared `Deep work hours` window is active, treat me as "
-            "do-not-disturb: write drafts, defer notifications, and surface "
-            "results after the window closes."
-        )
-        lines.append("")
+    header = (
+        "<!-- Generated by AdzeKit's Hermes adapter from "
+        "knowledge/soul.md + knowledge/role-context.md.\n"
+        "     Edit the AdzeKit sources and re-run `adzekit adapter install hermes`.\n"
+        "     This file is overwritten on every install. -->\n\n"
+    )
 
     target = dest if dest is not None else (
         HERMES_SOUL_PATH if HERMES_HOME.exists() else HERMES_PACK_DIR / "SOUL.md"
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    target.write_text(header + body.rstrip() + "\n", encoding="utf-8")
     return target
 
 
 # --- Skill pack building ----------------------------------------------------
 
 
+_AGENTSKILLS_LICENSE = "MIT"
+_AGENTSKILLS_AUTHOR = "AdzeKit"
+_AGENTSKILLS_VERSION = "0.4.0"
+
+
+def _extract_description(skill_body: str) -> str:
+    """Pull a one-line description from a skill's `## Goal` section.
+
+    Falls back to a generic description if the skill doesn't follow the
+    Goal/Inputs/Process/Outputs format.
+    """
+    lines = skill_body.splitlines()
+    in_goal = False
+    for line in lines:
+        stripped = line.strip()
+        if not in_goal:
+            if stripped.lower().startswith("## goal"):
+                in_goal = True
+            continue
+        if not stripped:
+            continue
+        if stripped.startswith("## "):
+            break
+        # First non-empty line under Goal is the description.
+        return stripped[:240]
+    # Fallback: first non-heading, non-empty line of the whole file.
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped[:240]
+    return "AdzeKit cognitive-prosthetic skill."
+
+
+def _yaml_escape(value: str) -> str:
+    """Wrap a string in double quotes and escape embedded quotes/newlines."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
+
+
+def _render_skill_md(name: str, body: str) -> str:
+    """Wrap a core skill body in agentskills.io-style YAML frontmatter."""
+    description = _extract_description(body)
+    frontmatter = "\n".join([
+        "---",
+        f"name: {name}",
+        f"description: {_yaml_escape(description)}",
+        f"version: {_AGENTSKILLS_VERSION}",
+        f"author: {_AGENTSKILLS_AUTHOR}",
+        f"license: {_AGENTSKILLS_LICENSE}",
+        "platforms:",
+        "  - macos",
+        "  - linux",
+        "metadata:",
+        "  source: AdzeKit core",
+        "  homepage: https://github.com/AdzeKit/AdzeKit",
+        "---",
+        "",
+    ])
+    return frontmatter + body.lstrip("\n")
+
+
 def build_skill_pack(*, pack_dir: Path | None = None) -> dict[str, Any]:
-    """Copy core skills into the Hermes pack layout.
+    """Build the Hermes skill pack at pack_dir/<skill>/SKILL.md.
 
-    The pack format follows Hermes' skill registry convention: a directory
-    where each `<skill>.md` is a top-level Hermes Skill row. AdzeKit core
-    skills already use a runtime-agnostic format (Goal / Inputs / Process
-    / Outputs / Safety / Notes for adapters), so the copy is verbatim.
+    Each core skill markdown becomes its own subdirectory with a SKILL.md
+    that has YAML frontmatter (per agentskills.io). The skill body
+    follows the frontmatter unchanged.
 
-    Returns metadata about the build.
+    Returns metadata about the build (skill names, pack dir path).
     """
     pack_dir = pack_dir or HERMES_PACK_DIR
     pack_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clean stale per-skill directories from prior builds.
+    for entry in list(pack_dir.iterdir()):
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        elif entry.is_file() and entry.suffix in (".md", ".toml"):
+            # Drop pre-B-rebuild flat skills and the obsolete pack.toml.
+            entry.unlink()
+
     copied: list[str] = []
     if CORE_SKILLS_DIR.exists():
-        # Clean out any prior pack contents except a manifest if present.
-        for existing in pack_dir.glob("*.md"):
-            existing.unlink()
         for src in sorted(CORE_SKILLS_DIR.glob("*.md")):
-            dest = pack_dir / src.name
-            dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-            copied.append(src.name)
-
-    # Write a pack manifest so Hermes can identify the pack source.
-    manifest = pack_dir / "pack.toml"
-    manifest.write_text(
-        (
-            'name = "adzekit"\n'
-            f'version = "0.4.0"\n'
-            'description = "AdzeKit cognitive-prosthetic skills (capture, daily-start, '
-            'inbox-triage, slack-capture, loop-momentum, weekly-review, graph-update, '
-            'distill). Backed by a markdown shed at ~/Repos/adzekit-workspace/."\n'
-            'author = "AdzeKit"\n'
-            'homepage = "https://github.com/AdzeKit/AdzeKit"\n'
-            'tags = ["productivity", "knowledge-graph", "cadence", "files-first"]\n'
-        ),
-        encoding="utf-8",
-    )
+            skill_name = src.stem
+            skill_dir = pack_dir / skill_name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            body = src.read_text(encoding="utf-8")
+            (skill_dir / "SKILL.md").write_text(
+                _render_skill_md(skill_name, body), encoding="utf-8",
+            )
+            copied.append(skill_name)
 
     return {
         "pack_dir": str(pack_dir),
         "skills": copied,
-        "manifest": str(manifest),
     }
 
 
@@ -165,33 +193,28 @@ def build_skill_pack(*, pack_dir: Path | None = None) -> dict[str, Any]:
 
 
 def install_hermes(settings: Settings | None = None) -> dict[str, Any]:
-    """Build the Hermes pack and translate SOUL.md.
+    """Build the pack, translate SOUL.md, mirror into ~/.hermes/ if present.
 
-    When ~/.hermes/ exists on the local machine, also mirror the pack into
-    ~/.hermes/skills/adzekit/ so Hermes picks it up automatically. When
-    Hermes isn't detected, the pack stays staged at adapters/hermes/pack/
-    and the user can copy it when they install Hermes.
-
-    Cron installation is left as a manual follow-up — Hermes' cron schema
-    isn't published yet, and we don't want to write speculative config
-    into the user's ~/.hermes/ tree.
+    When ~/.hermes/ exists, mirrors each `<skill>/SKILL.md` into
+    `~/.hermes/skills/adzekit/<skill>/SKILL.md`. When Hermes isn't
+    detected, the pack stays staged at `adapters/hermes/pack/` and the
+    user can copy it manually.
     """
     settings = settings or get_settings()
     pack_info = build_skill_pack()
     soul_path = translate_soul_to_hermes(settings)
 
-    hermes_skills_dir = None
+    hermes_skills_dir: str | None = None
     if HERMES_HOME.exists():
+        # Wipe any prior install of the adzekit category and recreate.
+        if HERMES_SKILLS_DIR.exists():
+            shutil.rmtree(HERMES_SKILLS_DIR)
         HERMES_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
-        # Mirror the pack into ~/.hermes/skills/adzekit/
-        for existing in HERMES_SKILLS_DIR.glob("*"):
-            if existing.is_file():
-                existing.unlink()
-            elif existing.is_dir():
-                shutil.rmtree(existing)
-        for src in Path(pack_info["pack_dir"]).iterdir():
-            if src.is_file():
-                shutil.copy(src, HERMES_SKILLS_DIR / src.name)
+        for skill_dir in Path(pack_info["pack_dir"]).iterdir():
+            if not skill_dir.is_dir():
+                continue
+            dest = HERMES_SKILLS_DIR / skill_dir.name
+            shutil.copytree(skill_dir, dest)
         hermes_skills_dir = str(HERMES_SKILLS_DIR)
 
     return {
@@ -204,19 +227,19 @@ def install_hermes(settings: Settings | None = None) -> dict[str, Any]:
 
 
 def uninstall_hermes() -> dict[str, Any]:
-    """Remove the staged pack and any installed Hermes skills/SOUL.md."""
+    """Remove the staged pack and any mirrored skills in ~/.hermes/."""
     pack_removed = False
     if HERMES_PACK_DIR.exists():
         shutil.rmtree(HERMES_PACK_DIR)
         pack_removed = True
 
-    hermes_skills_removed = None
+    hermes_skills_removed: str | None = None
     if HERMES_SKILLS_DIR.exists():
         shutil.rmtree(HERMES_SKILLS_DIR)
         hermes_skills_removed = str(HERMES_SKILLS_DIR)
 
-    # Leave ~/.hermes/SOUL.md in place by default — the user may have edited
-    # it. Removing requires explicit --purge in a future iteration.
+    # Leave ~/.hermes/SOUL.md in place — the user may have edited it.
+    # Explicit purge would require a separate flag.
 
     return {
         "adapter": "hermes",
@@ -226,30 +249,49 @@ def uninstall_hermes() -> dict[str, Any]:
     }
 
 
-# --- Bidirectional knowledge bridge -----------------------------------------
+def status_hermes(settings: Settings | None = None) -> dict[str, Any]:
+    """Report the install state of the Hermes adapter."""
+    settings = settings or get_settings()
+    pack_present = HERMES_PACK_DIR.exists() and any(
+        p.is_dir() and (p / "SKILL.md").exists()
+        for p in HERMES_PACK_DIR.iterdir()
+    ) if HERMES_PACK_DIR.exists() else False
+    soul_translated = (HERMES_PACK_DIR / "SOUL.md").exists() or HERMES_SOUL_PATH.exists()
+    soul_path = HERMES_SOUL_PATH if HERMES_SOUL_PATH.exists() else HERMES_PACK_DIR / "SOUL.md"
+    hermes_present = HERMES_HOME.exists()
+    hermes_skills_installed = (
+        HERMES_SKILLS_DIR.exists()
+        and any((p / "SKILL.md").exists() for p in HERMES_SKILLS_DIR.iterdir() if p.is_dir())
+    )
+
+    return {
+        "adapter": "hermes",
+        "pack_dir": str(HERMES_PACK_DIR),
+        "pack_present": pack_present,
+        "soul_path": str(soul_path),
+        "soul_translated": soul_translated,
+        "hermes_detected": hermes_present,
+        "hermes_skills_installed": hermes_skills_installed,
+    }
+
+
+# --- Knowledge bridge -------------------------------------------------------
 #
-# Why we bridge rather than replace:
+# Why bridge (not replace): Hermes' Honcho user model is opaque (embedding
+# store). AdzeKit's knowledge/ is markdown — readable, diffable, editable in
+# any text editor, recoverable from git log. Replacing knowledge/ with
+# Honcho would violate Principle 7 (Legibility Over Memory) and collapse
+# the distinction between "I wrote this" and "the agent inferred this."
 #
-# The user asked whether AdzeKit could replace its knowledge/ store with
-# Hermes' Honcho user model entirely. The answer is no — Honcho is an
-# opaque embedding store; the shed's markdown knowledge is the principled
-# answer to agent opacity (Principle 7: Legibility Over Memory). Replacing
-# knowledge/ with Honcho would discard the substrate.
+# Push (knowledge → Hermes context) is implemented; the file lands at
+# ~/.hermes/contexts/adzekit-knowledge.md so Hermes reads it as persistent
+# session context.
 #
-# Instead: bridge, in both directions.
-#
-#   Push (knowledge/ → Hermes): every knowledge/*.md file is exposed to
-#     Hermes via a single concatenated context file at
-#     ~/.hermes/contexts/adzekit-knowledge.md. Hermes reads it as
-#     persistent context on every session. The shed is the source of
-#     truth; Hermes is the consumer.
-#
-#   Pull (Hermes → AdzeKit): when Hermes' export integration drops a
-#     user-inferences markdown at ~/.hermes/exports/user-inferences.md,
-#     the bridge ingests it as a *proposal* draft in drafts/knowledge/.
-#     The human reviews and promotes via `adzekit drafts accept`. Hermes
-#     never writes directly to knowledge/; its inferences are subject to
-#     the same approval gate as any other agent output.
+# Pull (Hermes-inferred → drafts/) is NOT implemented and now fails loud.
+# Hermes has no documented export schema for "what the agent learned about
+# you." When/if it ships one (likely via the optional Honcho integration),
+# this is the place to wire it up — the draft-proposal contract is already
+# documented in docs/hermes-integration.md.
 
 
 def push_knowledge_to_hermes(
@@ -284,9 +326,9 @@ def push_knowledge_to_hermes(
         "_Edit the AdzeKit source notes; this file is regenerated on push._",
         "",
     ]
+    pushed_files: list[str] = []
     for path in files:
-        # Skip soul.md (translated separately via SOUL.md) and role-context
-        # (workspace-local identity facts — exposed via SOUL.md hints, not here).
+        # soul.md and role-context.md flow through SOUL.md instead of here.
         if path.name in ("soul.md", "role-context.md"):
             continue
         slug = path.stem
@@ -296,13 +338,28 @@ def push_knowledge_to_hermes(
         parts.append("")
         parts.append(path.read_text(encoding="utf-8").strip())
         parts.append("")
+        pushed_files.append(path.name)
     target.write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
 
     return {
         "pushed": True,
         "target": str(target),
-        "files": [p.name for p in files if p.name not in ("soul.md", "role-context.md")],
+        "files": pushed_files,
     }
+
+
+class HermesExportNotImplementedError(NotImplementedError):
+    """Raised by pull_inferences_from_hermes — Hermes has no export schema yet.
+
+    When Hermes ships a documented user-inferences export (most likely via
+    the Honcho integration), wire it up here. The contract is documented:
+    the export is read, wrapped with a "review before promoting" header,
+    and routed to drafts/knowledge/ as a normal draft proposal with full
+    provenance — subject to `adzekit drafts accept` like any other draft.
+
+    See docs/hermes-integration.md "Knowledge: bridge, not replace" for
+    the design.
+    """
 
 
 def pull_inferences_from_hermes(
@@ -310,131 +367,38 @@ def pull_inferences_from_hermes(
     *,
     export_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Ingest Hermes-inferred facts as a draft proposal.
+    """Pull direction of the bridge — currently raises (no Hermes export schema).
 
-    Reads from ``export_path`` (defaults to ~/.hermes/exports/user-inferences.md)
-    and writes the contents to a draft at
-    drafts/knowledge/hermes-inferred-YYYY-MM-DD-HHMM-{host}.md with full
-    provenance. The draft surfaces in INBOX for human review.
-
-    Returns metadata; when the export is missing, returns
-    {pulled: False, reason: ...} without raising.
+    Pre-fix this silently no-op'd when the placeholder export path didn't
+    exist, which was indistinguishable from "Hermes has nothing for me
+    today." Now raises HermesExportNotImplementedError with a clear
+    explanation so the user knows the feature is intentionally stubbed.
     """
-    settings = settings or get_settings()
-    src = export_path or HERMES_INFERRED_EXPORT
-    if not src.exists():
-        return {"pulled": False, "reason": "no_export_file", "src": str(src)}
-
-    body_text = src.read_text(encoding="utf-8").strip()
-    if not body_text:
-        return {"pulled": False, "reason": "empty_export", "src": str(src)}
-
-    # Lazy import: avoid circulars.
-    from adzekit.preprocessor import write_draft_with_frontmatter
-
-    # We deliberately route the draft into drafts/knowledge/ so it sits
-    # alongside the slack-capture knowledge drafts.
-    knowledge_drafts = settings.drafts_dir / "knowledge"
-    knowledge_drafts.mkdir(parents=True, exist_ok=True)
-
-    body = (
-        "# Hermes-inferred user model\n\n"
-        f"_Imported from `{src}` by `adzekit adapter sync hermes --pull`._\n\n"
-        "**Review before promoting.** These are Hermes' *inferences* about you "
-        "from session history, not facts you wrote. Read critically. Reject "
-        "anything that doesn't ring true. Promote the rest to `knowledge/` via "
-        "`adzekit drafts accept`.\n\n"
-        "---\n\n"
-        + body_text
-        + "\n"
+    raise HermesExportNotImplementedError(
+        "Hermes does not currently publish a documented export schema for "
+        "user inferences. The pull direction of the bridge is intentionally "
+        "stubbed until it does (likely via Hermes' optional Honcho "
+        "integration). The draft-proposal contract is already defined in "
+        "docs/hermes-integration.md — wire it up there when Hermes ships."
     )
-
-    written = write_draft_with_frontmatter(
-        "hermes-inferred",
-        body=body,
-        settings=settings,
-        inputs=[src],
-        trigger="manual",
-        summary="Hermes user-model inferences",
-    )
-    # Relocate from drafts/ root into drafts/knowledge/ so it lives with
-    # other knowledge captures.
-    target = knowledge_drafts / written.name
-    target.write_text(written.read_text(encoding="utf-8"), encoding="utf-8")
-    written.unlink()
-    _retarget_inbox(settings, written.name, target)
-
-    return {
-        "pulled": True,
-        "src": str(src),
-        "draft": str(target),
-    }
-
-
-def _retarget_inbox(settings: Settings, filename: str, new_path: Path) -> None:
-    """Rewrite the INBOX entry so it points at the new draft path.
-
-    Updates the per-entry sidecar at drafts/INBOX.d/{stem}.entry (the post-B1
-    authoritative storage) and regenerates the INBOX.md view. Falls back to a
-    naive str.replace on the legacy INBOX.md when no sidecar is present.
-    """
-    old_marker = f"`drafts/{filename}`"
-    try:
-        rel = str(new_path.resolve().relative_to(settings.shed.resolve()))
-    except ValueError:
-        rel = str(new_path)
-    new_marker = f"`{rel}`"
-
-    sidecar = settings.drafts_dir / "INBOX.d" / f"{Path(filename).stem}.entry"
-    if sidecar.exists():
-        text = sidecar.read_text(encoding="utf-8")
-        sidecar.write_text(text.replace(old_marker, new_marker), encoding="utf-8")
-        from adzekit.preprocessor import _regenerate_inbox_view
-        _regenerate_inbox_view(settings)
-        return
-
-    inbox = settings.drafts_dir / "INBOX.md"
-    if not inbox.exists():
-        return
-    text = inbox.read_text(encoding="utf-8")
-    inbox.write_text(text.replace(old_marker, new_marker), encoding="utf-8")
 
 
 def sync_hermes(
     settings: Settings | None = None,
     *,
-    direction: str = "both",
+    direction: str = "push",
 ) -> dict[str, Any]:
-    """Run the bidirectional bridge.
+    """Run the bridge. `direction` is now push-only by default.
 
-    direction: 'push' | 'pull' | 'both'. Default 'both'.
+    Pull raises HermesExportNotImplementedError. `direction="both"` runs
+    push and then fails fast on pull — the test suite uses this to verify
+    the error message.
     """
     settings = settings or get_settings()
     result: dict[str, Any] = {"adapter": "hermes", "direction": direction}
     if direction in ("push", "both"):
         result["push"] = push_knowledge_to_hermes(settings)
     if direction in ("pull", "both"):
+        # Surface the not-implemented error rather than silently no-op'ing.
         result["pull"] = pull_inferences_from_hermes(settings)
     return result
-
-
-def status_hermes(settings: Settings | None = None) -> dict[str, Any]:
-    """Report the install state of the Hermes adapter."""
-    settings = settings or get_settings()
-    pack_present = HERMES_PACK_DIR.exists() and (HERMES_PACK_DIR / "pack.toml").exists()
-    soul_translated = (HERMES_PACK_DIR / "SOUL.md").exists() or HERMES_SOUL_PATH.exists()
-    soul_path = HERMES_SOUL_PATH if HERMES_SOUL_PATH.exists() else HERMES_PACK_DIR / "SOUL.md"
-    hermes_present = HERMES_HOME.exists()
-    hermes_skills_installed = HERMES_SKILLS_DIR.exists() and any(
-        HERMES_SKILLS_DIR.glob("*.md")
-    )
-
-    return {
-        "adapter": "hermes",
-        "pack_dir": str(HERMES_PACK_DIR),
-        "pack_present": pack_present,
-        "soul_path": str(soul_path),
-        "soul_translated": soul_translated,
-        "hermes_detected": hermes_present,
-        "hermes_skills_installed": hermes_skills_installed,
-    }

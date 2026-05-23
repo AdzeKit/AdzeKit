@@ -1,6 +1,20 @@
 # AdzeKit × Hermes Integration
 
-Design exploration. Not a commitment.
+## Current status (as of 2026-05-22)
+
+| Piece | Status |
+|---|---|
+| SOUL.md translator | **Shipped, grounded.** Concatenates `knowledge/soul.md` + `knowledge/role-context.md` verbatim. Hermes treats SOUL.md as a plain markdown file with no schema — earlier "structured sections + hermes-hints block" code was speculative and has been replaced. |
+| Skill pack (`~/.hermes/skills/adzekit/<name>/SKILL.md`) | **Shipped, grounded.** Per agentskills.io standard: each skill is a directory containing `SKILL.md` with YAML frontmatter (`name`, `description`, `version`, `author`, `license`, `platforms`). Older `pack.toml` + flat layout was speculative and has been dropped. |
+| Knowledge push (`adzekit adapter sync hermes --direction push`) | **Shipped, grounded.** Concatenates `knowledge/*.md` (excluding soul/role-context) into `~/.hermes/contexts/adzekit-knowledge.md`. |
+| Knowledge pull (Hermes-inferred → drafts/) | **Stubbed.** Raises `HermesExportNotImplementedError`. Hermes doesn't publish a documented export schema; wire it up here when it does (likely via Honcho). The draft-proposal contract is defined below — implementation is the only missing piece. |
+| Cron installer | **Deferred.** Hermes has a documented cron CLI (`hermes cron create/list/pause/resume/remove`); installing entries automatically is feasible but requires Hermes installed locally to validate. The launchd plists (`adzekit cadence install`) cover macOS today. |
+| MCP config sync | **Deferred.** Hermes uses `~/.hermes/config.yaml` under `mcp_servers`. Same workspace MCPs (Slack, Jira) need to be declared there for skills to work fully. Not auto-edited yet — propose-via-draft is the planned shape. |
+| Wheel-install path resolution | **Deferred.** `_REPO_ROOT` assumes a git checkout; AdzeKit isn't on PyPI yet. Revisit when shipping a wheel. |
+
+Design exploration sections below are kept for the architectural rationale.
+The shipped code matches the verified Hermes facts; only deferred items are
+speculative.
 
 ## The user's ask
 
