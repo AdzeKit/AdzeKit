@@ -313,59 +313,6 @@ def cmd_adapter(args: argparse.Namespace) -> None:
                     f"commands: {result['commands']}, "
                     f"agents: {result['agents']}"
                 )
-    elif name == "rclone":
-        from adzekit.modules.adapters_rclone import (
-            install_rclone,
-            status_rclone,
-            sync_rclone,
-            uninstall_rclone,
-        )
-
-        settings = _resolve_settings(args)
-        if args.action == "install":
-            remote = getattr(args, "remote", None)
-            folder = getattr(args, "folder", None) or "adzekit"
-            if not remote:
-                print(
-                    "Error: rclone install requires --remote.\n"
-                    "Example: adzekit adapter install rclone --remote gdrive",
-                    file=sys.stderr,
-                )
-                raise SystemExit(2)
-            result = install_rclone(settings, remote=remote, folder=folder)
-            print(f"Configured rclone remote: {result['remote_path']}")
-            if not result["rclone_on_path"]:
-                print(
-                    "  Warning: `rclone` binary not on PATH. Install it before syncing:\n"
-                    "    brew install rclone  # macOS\n"
-                    "    rclone config         # set up the remote auth"
-                )
-        elif args.action == "uninstall":
-            result = uninstall_rclone(settings)
-            if result["removed_remote"]:
-                print(f"Cleared rclone remote (was: {result['removed_remote']}).")
-                print("Cloud content was not deleted; remove it manually if desired.")
-            else:
-                print("rclone adapter was not configured.")
-        elif args.action == "status":
-            result = status_rclone(settings)
-            marker = "✓" if result["configured"] else "✗"
-            print(f"  {marker} rclone remote: {result['remote_path'] or '(unset)'}")
-            bin_marker = "✓" if result["rclone_on_path"] else "✗"
-            print(f"  {bin_marker} rclone binary on PATH")
-            if result["configured"]:
-                print(f"      stock remote:  {result['stock_remote']}")
-                print(f"      drafts remote: {result['drafts_remote']}")
-        elif args.action == "sync":
-            direction = getattr(args, "direction", "both")
-            result = sync_rclone(settings, direction=direction)
-            if not result["synced"]:
-                print(f"Sync skipped: {result['reason']}")
-            else:
-                if result.get("pulled"):
-                    print("pulled workbench (stock/ + drafts/)")
-                if result.get("pushed"):
-                    print("pushed workbench (stock/ + drafts/)")
     elif name == "hermes":
         from adzekit.modules.adapters_hermes import (
             install_hermes,
@@ -1206,8 +1153,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_adapter.add_argument(
         "name",
-        choices=["claude-code", "rclone", "hermes"],
-        help="Which adapter to operate on.",
+        choices=["claude-code", "hermes"],
+        help="Which runtime adapter to operate on.",
     )
     p_adapter.add_argument(
         "action",
@@ -1222,20 +1169,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--direction",
         choices=["push", "pull", "both"],
         default="both",
-        help=(
-            "For `sync`: push (knowledge→Hermes / shed→rclone), "
-            "pull (Hermes-inferred→drafts / rclone→shed), or both."
-        ),
-    )
-    p_adapter.add_argument(
-        "--remote",
-        default=None,
-        help="For `rclone install`: rclone remote name (e.g. 'gdrive').",
-    )
-    p_adapter.add_argument(
-        "--folder",
-        default=None,
-        help="For `rclone install`: subfolder on the remote (default: 'adzekit').",
+        help="For `hermes sync`: push knowledge → Hermes, pull inferences → drafts, or both.",
     )
     p_adapter.set_defaults(func=cmd_adapter)
 
