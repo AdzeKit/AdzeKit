@@ -478,7 +478,7 @@ def cmd_gateway(args: argparse.Namespace) -> None:
 
 
 def cmd_mcp(args: argparse.Namespace) -> None:
-    """Manage the Shed MCP server wiring in ~/.claude/settings.json."""
+    """Manage AdzeKit MCP server wiring in ~/.claude/settings.json."""
     from adzekit.modules.mcp_install import (
         install_mcp,
         status_mcp,
@@ -486,55 +486,63 @@ def cmd_mcp(args: argparse.Namespace) -> None:
     )
 
     settings = _resolve_settings(args)
+    only = None
+    if args.only:
+        only = [s.strip() for s in args.only.split(",") if s.strip()]
 
     if args.action == "install":
         try:
-            result = install_mcp(settings)
+            result = install_mcp(settings, only=only)
         except RuntimeError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
-        print(f"Installed `{result['server_name']}` into {result['settings_path']}")
-        print(f"  command: {result['command']}")
-        print(f"  shed:    {result['shed']}")
-        if not result["binary_on_path"]:
-            print(
-                "  Warning: the `adzekit-mcp-shed` binary is not on PATH yet.\n"
-                "  Run `uv pip install -e .` (or `pip install -e .`) so Claude Code\n"
-                "  can launch the server."
-            )
-        print(
-            "\nRestart Claude Code (or reload its MCP servers) for the change to "
-            "take effect."
-        )
+        if not result["installed"] and not result["skipped"]:
+            print("No MCP servers to install.")
+            return
+        for row in result["installed"]:
+            marker = "✓" if row["binary_on_path"] else "⚠"
+            print(f"  {marker} installed {row['name']} ({row['command']})")
+            if not row["binary_on_path"]:
+                print(
+                    f"      binary not on PATH yet; "
+                    f"run `uv pip install -e .` (or `pip install -e .`)"
+                )
+        for row in result["skipped"]:
+            print(f"  ✗ skipped {row['name']}: {row['reason']}")
+        if result["installed"]:
+            print(f"\nSettings: {result['settings_path']}")
+            print(f"Shed:     {result['shed']}")
+            print("Restart Claude Code for changes to take effect.")
     elif args.action == "uninstall":
         try:
-            result = uninstall_mcp()
+            result = uninstall_mcp(only=only)
         except RuntimeError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1)
         if result["removed"]:
-            print(f"Removed Shed MCP entry from {result['settings_path']}")
+            for name in result["removed"]:
+                print(f"  removed {name}")
         else:
-            print(f"Shed MCP entry not present in {result['settings_path']}")
+            print("No AdzeKit MCP entries present in settings.json.")
     elif args.action == "status":
         result = status_mcp(settings)
         if not result["settings_parseable"]:
             print(f"  ✗ {result['settings_path']} is not valid JSON")
             return
-        entry_marker = "✓" if result["entry_present"] else "✗"
-        bin_marker = "✓" if result["binary_on_path"] else "✗"
-        print(f"  {entry_marker} adzekit-shed entry in {result['settings_path']}")
-        print(f"  {bin_marker} adzekit-mcp-shed binary on PATH")
-        if result["binary_path"]:
-            print(f"      path: {result['binary_path']}")
-        if result["entry_present"]:
-            print(f"      command:  {result['entry_command']}")
-            print(f"      configured shed: {result['configured_shed']}")
-            print(f"      current shed:    {result['current_shed']}")
-            if not result["shed_matches"]:
+        print(f"  settings: {result['settings_path']}")
+        print(f"  shed:     {result['current_shed']}")
+        print()
+        for row in result["servers"]:
+            reg = "✓" if row["registered"] else "✗"
+            binm = "✓" if row["binary_on_path"] else "✗"
+            ready = "✓" if row["adapter_ready"] else "✗"
+            print(
+                f"  registered:{reg}  binary:{binm}  adapter:{ready}  {row['name']}"
+            )
+            if row["registered"] and not row["shed_matches"]:
                 print(
-                    "      Warning: configured shed in settings.json doesn't match "
-                    "the current shed. Re-run `adzekit mcp install` to update."
+                    f"      Warning: configured shed {row['configured_shed']!r} "
+                    f"doesn't match current shed."
                 )
 
 
@@ -1429,12 +1437,20 @@ def build_parser() -> argparse.ArgumentParser:
     # mcp
     p_mcp = sub.add_parser(
         "mcp",
-        help="Wire the Shed MCP server into ~/.claude/settings.json.",
+        help="Wire AdzeKit MCP servers (shed, gmail, calendar) into ~/.claude/settings.json.",
     )
     p_mcp.add_argument(
         "action",
         choices=["install", "uninstall", "status"],
         help="install: register in settings.json; uninstall: remove; status: report.",
+    )
+    p_mcp.add_argument(
+        "--only",
+        default=None,
+        help=(
+            "Comma-separated subset of servers to operate on "
+            "(shed, gmail, calendar). Without this, all available are processed."
+        ),
     )
     p_mcp.set_defaults(func=cmd_mcp)
 
