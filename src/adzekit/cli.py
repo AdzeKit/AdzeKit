@@ -372,6 +372,25 @@ def cmd_adapter(args: argparse.Namespace) -> None:
         raise SystemExit(2)
 
 
+# -- gateway ---------------------------------------------------------------
+
+
+def cmd_gateway(args: argparse.Namespace) -> None:
+    """Start the gateway daemon (Telegram bridge by default)."""
+    if args.transport != "telegram":
+        print(f"Unknown gateway transport: {args.transport}", file=sys.stderr)
+        raise SystemExit(2)
+    try:
+        from adzekit.gateway.telegram import run
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    try:
+        run()
+    except KeyboardInterrupt:
+        print("\nGateway stopped.")
+
+
 # -- mcp -------------------------------------------------------------------
 
 
@@ -1269,6 +1288,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="install: copy files into the runtime; uninstall: remove; status: report.",
     )
     p_adapter.set_defaults(func=cmd_adapter)
+
+    # gateway
+    p_gateway = sub.add_parser(
+        "gateway",
+        help="Run the gateway daemon (Telegram → Claude Code bridge).",
+    )
+    p_gateway_sub = p_gateway.add_subparsers(dest="gateway_command", required=True)
+    p_gateway_start = p_gateway_sub.add_parser(
+        "start",
+        help="Start the gateway. Reads ADZEKIT_TELEGRAM_BOT_TOKEN + ADZEKIT_TELEGRAM_ALLOWED_USER_IDS.",
+    )
+    p_gateway_start.add_argument(
+        "--transport",
+        default="telegram",
+        choices=["telegram"],
+        help="Which gateway transport to run (default: telegram).",
+    )
+    p_gateway_start.set_defaults(func=cmd_gateway)
 
     # mcp
     p_mcp = sub.add_parser(
