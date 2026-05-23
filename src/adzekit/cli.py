@@ -277,6 +277,85 @@ def _drafts_gc(args: argparse.Namespace) -> None:
     print(f"\n{len(archived)} draft(s) gc'd.")
 
 
+# -- adapter ---------------------------------------------------------------
+
+
+def cmd_adapter(args: argparse.Namespace) -> None:
+    """Install, uninstall, or report status for an AdzeKit adapter."""
+    name = args.name
+
+    if name == "claude-code":
+        from adzekit.modules.adapters import (
+            install_claude_code,
+            status_claude_code,
+            uninstall_claude_code,
+        )
+
+        if args.action == "install":
+            result = install_claude_code()
+            print(f"Installed claude-code adapter at {result['target']}")
+            print(f"  skills: {len(result['skills_copied'])}")
+            print(f"  mirrored: {', '.join(result['mirrored_dirs'])}")
+        elif args.action == "uninstall":
+            result = uninstall_claude_code()
+            if result["removed"]:
+                print(f"Removed claude-code adapter from {result['target']}")
+            else:
+                print(f"claude-code adapter not installed at {result['target']}")
+        elif args.action == "status":
+            result = status_claude_code()
+            marker = "✓" if result["installed"] else "✗"
+            print(f"  {marker} claude-code  installed={result['installed']}")
+            print(f"      target: {result['target']}")
+            if result["installed"]:
+                print(
+                    f"      skills: {result['skills']}, "
+                    f"commands: {result['commands']}, "
+                    f"agents: {result['agents']}"
+                )
+    elif name == "rclone":
+        print(
+            "rclone adapter manages stock/ and drafts/ sync to a cloud remote.\n"
+            "Use the existing CLI commands:\n"
+            "  adzekit setup-sync [--remote <name>] [--folder <path>]\n"
+            "  adzekit sync [pull|push]\n"
+            "(The rclone adapter is an alias for these.)"
+        )
+    elif name == "hermes":
+        from adzekit.modules.adapters_hermes import (
+            install_hermes,
+            status_hermes,
+            uninstall_hermes,
+        )
+
+        if args.action == "install":
+            result = install_hermes(_resolve_settings(args))
+            print(f"Built Hermes skill pack at {result['pack_dir']}")
+            print(f"  skills: {len(result['skills'])}")
+            print(f"  SOUL.md: {result['soul_path']}")
+            if result.get("hermes_skills_dir"):
+                print(f"  installed into {result['hermes_skills_dir']}")
+            else:
+                print(
+                    "  (Hermes not detected on this machine; pack is staged at\n"
+                    f"   {result['pack_dir']} — copy into ~/.hermes/skills/ when ready.)"
+                )
+        elif args.action == "uninstall":
+            result = uninstall_hermes()
+            print(f"Removed Hermes skill pack from {result['pack_dir']}")
+            if result.get("hermes_skills_removed"):
+                print(f"  also removed {result['hermes_skills_removed']}")
+        elif args.action == "status":
+            result = status_hermes(_resolve_settings(args))
+            marker = "✓" if result["pack_present"] else "✗"
+            print(f"  {marker} hermes pack: {result['pack_dir']}")
+            soul_marker = "✓" if result["soul_translated"] else "✗"
+            print(f"  {soul_marker} SOUL.md:    {result['soul_path']}")
+    else:
+        print(f"Unknown adapter: {name}", file=sys.stderr)
+        raise SystemExit(2)
+
+
 # -- distill ---------------------------------------------------------------
 
 
@@ -1056,6 +1135,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Delete files older than N days (default: from config or 7).",
     )
     p_pd.set_defaults(func=cmd_prune_drafts)
+
+    # adapter (subcommand: adapter <name> <action>)
+    p_adapter = sub.add_parser(
+        "adapter",
+        help="Install/uninstall/status for runtime and sync adapters.",
+    )
+    p_adapter.add_argument(
+        "name",
+        choices=["claude-code", "rclone", "hermes"],
+        help="Which adapter to operate on.",
+    )
+    p_adapter.add_argument(
+        "action",
+        choices=["install", "uninstall", "status"],
+        help="install: copy files into the runtime; uninstall: remove; status: report.",
+    )
+    p_adapter.set_defaults(func=cmd_adapter)
 
     # distill
     p_distill = sub.add_parser(

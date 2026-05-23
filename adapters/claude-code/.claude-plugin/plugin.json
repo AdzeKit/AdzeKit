@@ -1,0 +1,12 @@
+{
+  "name": "adzekit",
+  "description": "AdzeKit cognitive-prosthetic skills for Claude Code: capture, daily ritual, inbox triage, slack capture, loop momentum, knowledge graph, and skill distillation. Backed by a runtime-agnostic markdown shed at ~/Repos/adzekit-workspace/.",
+  "version": "0.4.0",
+  "author": {
+    "name": "AdzeKit"
+  },
+  "homepage": "https://github.com/AdzeKit/AdzeKit",
+  "skills": "./skills/",
+  "commands": "./commands/",
+  "agents": "./agents/"
+}
