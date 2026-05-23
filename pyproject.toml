@@ -29,6 +29,8 @@ dev = [
 [project.scripts]
 adzekit = "adzekit.cli:main"
 adzekit-mcp-shed = "adzekit.mcp.shed:main"
+adzekit-mcp-gmail = "adzekit.mcp.gmail:main"
+adzekit-mcp-calendar = "adzekit.mcp.calendar:main"
 
 [build-system]
 requires = ["hatchling"]
