@@ -367,54 +367,6 @@ def cmd_adapter(args: argparse.Namespace) -> None:
                     f"commands: {result['commands']}, "
                     f"agents: {result['agents']}"
                 )
-    elif name == "hermes":
-        from adzekit.modules.adapters_hermes import (
-            install_hermes,
-            status_hermes,
-            sync_hermes,
-            uninstall_hermes,
-        )
-
-        if args.action == "install":
-            result = install_hermes(_resolve_settings(args))
-            print(f"Built Hermes skill pack at {result['pack_dir']}")
-            print(f"  skills: {len(result['skills'])}")
-            print(f"  SOUL.md: {result['soul_path']}")
-            if result.get("hermes_skills_dir"):
-                print(f"  installed into {result['hermes_skills_dir']}")
-            else:
-                print(
-                    "  (Hermes not detected on this machine; pack is staged at\n"
-                    f"   {result['pack_dir']} — copy into ~/.hermes/skills/ when ready.)"
-                )
-        elif args.action == "uninstall":
-            result = uninstall_hermes()
-            print(f"Removed Hermes skill pack from {result['pack_dir']}")
-            if result.get("hermes_skills_removed"):
-                print(f"  also removed {result['hermes_skills_removed']}")
-        elif args.action == "status":
-            result = status_hermes(_resolve_settings(args))
-            marker = "✓" if result["pack_present"] else "✗"
-            print(f"  {marker} hermes pack: {result['pack_dir']}")
-            soul_marker = "✓" if result["soul_translated"] else "✗"
-            print(f"  {soul_marker} SOUL.md:    {result['soul_path']}")
-        elif args.action == "sync":
-            from adzekit.modules.adapters_hermes import HermesExportNotImplementedError
-            # Default direction post-B is push-only; pull raises until Hermes
-            # ships an export schema.
-            direction = getattr(args, "direction", None) or "push"
-            try:
-                result = sync_hermes(_resolve_settings(args), direction=direction)
-            except HermesExportNotImplementedError as exc:
-                print(f"pull: not implemented\n  {exc}", file=sys.stderr)
-                raise SystemExit(2)
-            if "push" in result:
-                push = result["push"]
-                if push.get("pushed"):
-                    print(f"push: wrote {push['target']}")
-                    print(f"  knowledge files: {len(push['files'])}")
-                else:
-                    print(f"push: skipped ({push.get('reason')})")
     else:
         print(f"Unknown adapter: {name}", file=sys.stderr)
         raise SystemExit(2)
@@ -1240,27 +1192,17 @@ def build_parser() -> argparse.ArgumentParser:
     # adapter (subcommand: adapter <name> <action>)
     p_adapter = sub.add_parser(
         "adapter",
-        help="Install/uninstall/status for runtime and sync adapters.",
+        help="Install/uninstall/status for runtime and integration adapters.",
     )
     p_adapter.add_argument(
         "name",
-        choices=["claude-code", "hermes"],
-        help="Which runtime adapter to operate on.",
+        choices=["claude-code"],
+        help="Which adapter to operate on.",
     )
     p_adapter.add_argument(
         "action",
-        choices=["install", "uninstall", "status", "sync"],
-        help=(
-            "install: copy files into the runtime; uninstall: remove; "
-            "status: report; sync: bidirectional knowledge bridge "
-            "(hermes only)."
-        ),
-    )
-    p_adapter.add_argument(
-        "--direction",
-        choices=["push", "pull", "both"],
-        default="both",
-        help="For `hermes sync`: push knowledge → Hermes, pull inferences → drafts, or both.",
+        choices=["install", "uninstall", "status"],
+        help="install: copy files into the runtime; uninstall: remove; status: report.",
     )
     p_adapter.set_defaults(func=cmd_adapter)
 

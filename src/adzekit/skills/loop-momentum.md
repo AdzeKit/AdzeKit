@@ -127,6 +127,6 @@ minutes monolithic. The bigger the loop set, the bigger the win.
 - Project-repo discovery: project files may declare a `> Repo:` blockquote with a git
   remote URL. Loop-momentum searches `git log` in those repos for evidence. Without that
   declaration, only the workspace repo is searched.
-- For Hermes adapter: each evidence source becomes a Hermes MCP server connection. Workers
-  are spawned via `delegate_tool` with selective MCP inheritance — a worker handling 5
-  loops only gets the MCPs it needs, not the full registry.
+- Each evidence source is typically reached via an MCP server connection. Workers are
+  spawned via the adapter's sub-agent primitive with selective MCP inheritance — a worker
+  handling 5 loops only gets the MCPs it needs, not the full registry.

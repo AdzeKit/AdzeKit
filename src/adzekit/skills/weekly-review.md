@@ -103,6 +103,5 @@ implicitly (parallel `Read` tool calls in a single turn).
   one mind seeing the whole week.
 - Loop file naming: workspace uses `open.md`/`closed.md`; older spec uses
   `active.md`/`archive.md`. Adapter resolves which is present.
-- For Hermes adapter: invoke as a single delegation with leaf role; no children.
-- Argument parsing: adapters decide how to surface the optional week argument. Claude Code
-  uses `$ARGUMENTS`; Hermes uses positional/named parameters per its CLI convention.
+- Argument parsing: the adapter decides how to surface the optional week argument.
+  The Claude Code adapter uses `$ARGUMENTS`.

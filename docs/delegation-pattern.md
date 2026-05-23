@@ -75,24 +75,12 @@ adapter expresses *how to execute* it.
   batch (`spawning 5 email-triage workers (200 emails, 40 per worker)`) and a one-line
   summary after.
 
-### Hermes adapter (planned)
-
-- **Orchestrator**: the Hermes skill row's main loop.
-- **Worker spawn**: `delegate_tool` with `role="leaf"` (workers cannot spawn
-  grandchildren) and `inherit_mcp_toolsets` set to only the MCPs the worker needs.
-- **Worker type**: a child Hermes session with its own context, terminal, and tool
-  registry.
-- **JSON return**: worker's final message is the JSON payload.
-- **Concurrency**: `delegation.max_concurrent_children = 5` in Hermes config.
-- **Streaming/progress**: native Hermes streaming surfaces child progress; no extra
-  orchestrator messaging needed.
-
-### Future adapters (Cursor, Aider, codex, etc.)
+### Future adapters
 
 Any runtime that supports (a) isolated sub-agent execution with (b) selectable tool
-sets and (c) a way to return structured output qualifies. Adapters that lack one of
-these can still implement the skill spec as a monolithic single-context fallback —
-the skill works, it's just slower.
+sets and (c) a way to return structured output qualifies for the orchestrator+worker
+pattern documented here. Runtimes that lack one of these can still implement the
+skill spec as a monolithic single-context fallback — the skill works, it's just slower.
 
 ## The worker contract
 

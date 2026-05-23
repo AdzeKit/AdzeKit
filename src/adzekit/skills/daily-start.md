@@ -129,7 +129,6 @@ Output goes to `{SHED}/drafts/daily-YYYY-MM-DD.md` for human review. The human m
 - Loop file naming varies: `loops/open.md` (workspace convention) or `loops/active.md` (older
   spec). The adapter resolves which is present and reads accordingly.
 - Yesterday lookup may need to skip weekends — the "go back up to 3 days" rule handles this.
-- Step 1 (optional triage) is the natural point for adapters to demonstrate skill chaining.
-  Hermes adapter may use `delegate_tool` to invoke triage as a child agent; Claude Code
-  adapter invokes the `/inbox-triage` slash command. Either way, daily-start does not block
-  on triage if it's unavailable.
+- Step 1 (optional triage) is the natural point for skill chaining. The Claude Code
+  adapter invokes the `/inbox-triage` slash command. Either way, daily-start does not
+  block on triage if it's unavailable.
