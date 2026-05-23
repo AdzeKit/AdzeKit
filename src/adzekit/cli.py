@@ -372,6 +372,70 @@ def cmd_adapter(args: argparse.Namespace) -> None:
         raise SystemExit(2)
 
 
+# -- mcp -------------------------------------------------------------------
+
+
+def cmd_mcp(args: argparse.Namespace) -> None:
+    """Manage the Shed MCP server wiring in ~/.claude/settings.json."""
+    from adzekit.modules.mcp_install import (
+        install_mcp,
+        status_mcp,
+        uninstall_mcp,
+    )
+
+    settings = _resolve_settings(args)
+
+    if args.action == "install":
+        try:
+            result = install_mcp(settings)
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        print(f"Installed `{result['server_name']}` into {result['settings_path']}")
+        print(f"  command: {result['command']}")
+        print(f"  shed:    {result['shed']}")
+        if not result["binary_on_path"]:
+            print(
+                "  Warning: the `adzekit-mcp-shed` binary is not on PATH yet.\n"
+                "  Run `uv pip install -e .` (or `pip install -e .`) so Claude Code\n"
+                "  can launch the server."
+            )
+        print(
+            "\nRestart Claude Code (or reload its MCP servers) for the change to "
+            "take effect."
+        )
+    elif args.action == "uninstall":
+        try:
+            result = uninstall_mcp()
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        if result["removed"]:
+            print(f"Removed Shed MCP entry from {result['settings_path']}")
+        else:
+            print(f"Shed MCP entry not present in {result['settings_path']}")
+    elif args.action == "status":
+        result = status_mcp(settings)
+        if not result["settings_parseable"]:
+            print(f"  ✗ {result['settings_path']} is not valid JSON")
+            return
+        entry_marker = "✓" if result["entry_present"] else "✗"
+        bin_marker = "✓" if result["binary_on_path"] else "✗"
+        print(f"  {entry_marker} adzekit-shed entry in {result['settings_path']}")
+        print(f"  {bin_marker} adzekit-mcp-shed binary on PATH")
+        if result["binary_path"]:
+            print(f"      path: {result['binary_path']}")
+        if result["entry_present"]:
+            print(f"      command:  {result['entry_command']}")
+            print(f"      configured shed: {result['configured_shed']}")
+            print(f"      current shed:    {result['current_shed']}")
+            if not result["shed_matches"]:
+                print(
+                    "      Warning: configured shed in settings.json doesn't match "
+                    "the current shed. Re-run `adzekit mcp install` to update."
+                )
+
+
 # -- distill ---------------------------------------------------------------
 
 
@@ -1205,6 +1269,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="install: copy files into the runtime; uninstall: remove; status: report.",
     )
     p_adapter.set_defaults(func=cmd_adapter)
+
+    # mcp
+    p_mcp = sub.add_parser(
+        "mcp",
+        help="Wire the Shed MCP server into ~/.claude/settings.json.",
+    )
+    p_mcp.add_argument(
+        "action",
+        choices=["install", "uninstall", "status"],
+        help="install: register in settings.json; uninstall: remove; status: report.",
+    )
+    p_mcp.set_defaults(func=cmd_mcp)
 
     # distill
     p_distill = sub.add_parser(
