@@ -141,12 +141,62 @@ The "seamless" comes from three things:
 - Build `adapters/hermes/` with confidence: SOUL.md translation, skill pack publication,
   cadence install via Hermes cron, session-line append.
 
+## Knowledge: bridge, not replace
+
+> Question raised mid-design: "Could AdzeKit just replace its knowledge/ store with
+> Hermes' Honcho user model entirely?"
+
+The answer is **no, bridge**. Two reasons:
+
+1. **Honcho is an opaque embedding store.** AdzeKit's `knowledge/` is markdown —
+   readable, diffable, editable in any text editor, recoverable from `git log`.
+   Replacing it with Honcho violates Principle 7 (Legibility Over Memory) and
+   Principle 1 (Files First). You couldn't `git blame` a Honcho row to find when
+   a fact entered your worldview.
+2. **The two stores serve different epistemic purposes.** AdzeKit's knowledge is
+   what you've *written down* — claims you stand behind. Hermes' Honcho is what
+   Hermes has *inferred about you* from session history. Conflating them collapses
+   the distinction between "I said this" and "the agent thinks this about me."
+
+### The bridge
+
+Two directions, each implemented via the adapter:
+
+```bash
+adzekit adapter sync hermes --direction push   # knowledge/ → ~/.hermes/contexts/adzekit-knowledge.md
+adzekit adapter sync hermes --direction pull   # ~/.hermes/exports/user-inferences.md → drafts/knowledge/hermes-inferred-*.md
+adzekit adapter sync hermes                    # both (default)
+```
+
+**Push** concatenates `knowledge/*.md` (excluding `soul.md` and `role-context.md`,
+which surface through SOUL.md instead) into a single Hermes context file at
+`~/.hermes/contexts/adzekit-knowledge.md`. Hermes loads it as persistent context
+on every session. The shed is canonical; Hermes is the consumer. Re-push after
+editing any knowledge note.
+
+**Pull** ingests Hermes' exported user-inferences markdown (at
+`~/.hermes/exports/user-inferences.md` — Hermes' export integration writes there;
+today that path is a placeholder until Hermes ships an export schema) as a
+**draft proposal** at `drafts/knowledge/hermes-inferred-YYYY-MM-DD-HHMM-{host}.md`.
+The draft carries the full provenance header. The human reviews via
+`adzekit drafts list` and promotes via `adzekit drafts accept`. Hermes never
+writes directly to `knowledge/`; its inferences pass through the same approval
+gate as any other agent output.
+
+### What this preserves
+
+- The shed remains canonical, legible, and editable.
+- The human stays in the loop on what enters their identity/knowledge layer.
+- Multi-machine sync still works through git (inferred drafts land in the
+  workspace, get reviewed, migrate to `knowledge/` only after human approval).
+- Hermes can run on a $5 VPS without becoming the source of truth — pull it
+  offline tomorrow and your shed is unchanged.
+
 ## Still deferred (now with clear reasons)
 
-- **Building `adapters/hermes/`** — defer until the Claude Code adapter is shipped and
-  validates the adapter contract. Hermes adapter copies the shape, doesn't invent it.
-- **agentskills.io publication** — defer until generic core skills are stable (Phase 1a
-  complete) and `adapters/hermes/pack.toml` schema is known.
-- **Conflict tooling** — wait for the user to actually encounter a multi-machine git
-  conflict in `drafts/`. If it never happens, don't build for it. If it happens often,
-  build minimal helpers then.
+- **agentskills.io publication** — defer until the install flow is validated
+  end-to-end with Hermes actually running on the user's machine.
+- **Hermes cron installer** — Hermes' cron schema isn't published yet. AdzeKit's
+  launchd plists remain the canonical cadence layer until the schema stabilizes.
+- **Conflict tooling for multi-machine drafts** — wait for the user to actually
+  encounter a problem. If it never happens, don't build for it.

@@ -314,17 +314,63 @@ def cmd_adapter(args: argparse.Namespace) -> None:
                     f"agents: {result['agents']}"
                 )
     elif name == "rclone":
-        print(
-            "rclone adapter manages stock/ and drafts/ sync to a cloud remote.\n"
-            "Use the existing CLI commands:\n"
-            "  adzekit setup-sync [--remote <name>] [--folder <path>]\n"
-            "  adzekit sync [pull|push]\n"
-            "(The rclone adapter is an alias for these.)"
+        from adzekit.modules.adapters_rclone import (
+            install_rclone,
+            status_rclone,
+            sync_rclone,
+            uninstall_rclone,
         )
+
+        settings = _resolve_settings(args)
+        if args.action == "install":
+            remote = getattr(args, "remote", None)
+            folder = getattr(args, "folder", None) or "adzekit"
+            if not remote:
+                print(
+                    "Error: rclone install requires --remote.\n"
+                    "Example: adzekit adapter install rclone --remote gdrive",
+                    file=sys.stderr,
+                )
+                raise SystemExit(2)
+            result = install_rclone(settings, remote=remote, folder=folder)
+            print(f"Configured rclone remote: {result['remote_path']}")
+            if not result["rclone_on_path"]:
+                print(
+                    "  Warning: `rclone` binary not on PATH. Install it before syncing:\n"
+                    "    brew install rclone  # macOS\n"
+                    "    rclone config         # set up the remote auth"
+                )
+        elif args.action == "uninstall":
+            result = uninstall_rclone(settings)
+            if result["removed_remote"]:
+                print(f"Cleared rclone remote (was: {result['removed_remote']}).")
+                print("Cloud content was not deleted; remove it manually if desired.")
+            else:
+                print("rclone adapter was not configured.")
+        elif args.action == "status":
+            result = status_rclone(settings)
+            marker = "✓" if result["configured"] else "✗"
+            print(f"  {marker} rclone remote: {result['remote_path'] or '(unset)'}")
+            bin_marker = "✓" if result["rclone_on_path"] else "✗"
+            print(f"  {bin_marker} rclone binary on PATH")
+            if result["configured"]:
+                print(f"      stock remote:  {result['stock_remote']}")
+                print(f"      drafts remote: {result['drafts_remote']}")
+        elif args.action == "sync":
+            direction = getattr(args, "direction", "both")
+            result = sync_rclone(settings, direction=direction)
+            if not result["synced"]:
+                print(f"Sync skipped: {result['reason']}")
+            else:
+                if result.get("pulled"):
+                    print("pulled workbench (stock/ + drafts/)")
+                if result.get("pushed"):
+                    print("pushed workbench (stock/ + drafts/)")
     elif name == "hermes":
         from adzekit.modules.adapters_hermes import (
             install_hermes,
             status_hermes,
+            sync_hermes,
             uninstall_hermes,
         )
 
@@ -351,6 +397,23 @@ def cmd_adapter(args: argparse.Namespace) -> None:
             print(f"  {marker} hermes pack: {result['pack_dir']}")
             soul_marker = "✓" if result["soul_translated"] else "✗"
             print(f"  {soul_marker} SOUL.md:    {result['soul_path']}")
+        elif args.action == "sync":
+            direction = getattr(args, "direction", "both")
+            result = sync_hermes(_resolve_settings(args), direction=direction)
+            if "push" in result:
+                push = result["push"]
+                if push.get("pushed"):
+                    print(f"push: wrote {push['target']}")
+                    print(f"  knowledge files: {len(push['files'])}")
+                else:
+                    print(f"push: skipped ({push.get('reason')})")
+            if "pull" in result:
+                pull = result["pull"]
+                if pull.get("pulled"):
+                    print(f"pull: proposal at {pull['draft']}")
+                    print(f"  source: {pull['src']}")
+                else:
+                    print(f"pull: skipped ({pull.get('reason')})")
     else:
         print(f"Unknown adapter: {name}", file=sys.stderr)
         raise SystemExit(2)
@@ -1148,8 +1211,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_adapter.add_argument(
         "action",
-        choices=["install", "uninstall", "status"],
-        help="install: copy files into the runtime; uninstall: remove; status: report.",
+        choices=["install", "uninstall", "status", "sync"],
+        help=(
+            "install: copy files into the runtime; uninstall: remove; "
+            "status: report; sync: bidirectional knowledge bridge "
+            "(hermes only)."
+        ),
+    )
+    p_adapter.add_argument(
+        "--direction",
+        choices=["push", "pull", "both"],
+        default="both",
+        help=(
+            "For `sync`: push (knowledge→Hermes / shed→rclone), "
+            "pull (Hermes-inferred→drafts / rclone→shed), or both."
+        ),
+    )
+    p_adapter.add_argument(
+        "--remote",
+        default=None,
+        help="For `rclone install`: rclone remote name (e.g. 'gdrive').",
+    )
+    p_adapter.add_argument(
+        "--folder",
+        default=None,
+        help="For `rclone install`: subfolder on the remote (default: 'adzekit').",
     )
     p_adapter.set_defaults(func=cmd_adapter)
 
