@@ -367,9 +367,92 @@ def cmd_adapter(args: argparse.Namespace) -> None:
                     f"commands: {result['commands']}, "
                     f"agents: {result['agents']}"
                 )
+    elif name == "gmail":
+        from adzekit.modules.adapters_gmail import (
+            install_gmail,
+            status_gmail,
+            uninstall_gmail,
+        )
+        settings = _resolve_settings(args)
+        if args.action == "install":
+            result = install_gmail(settings)
+            if not result["installed"]:
+                print(f"Gmail install failed: {result['reason']}", file=sys.stderr)
+                raise SystemExit(1)
+            print(f"Gmail adapter installed. {result['labels_total']} labels found.")
+            if result["missing_labels"]:
+                print(f"  Missing expected labels: {', '.join(result['missing_labels'])}")
+                print(
+                    "  Create them in Gmail's UI (Settings → Labels) or via the"
+                    " Gmail API to unlock inbox-triage's labeling features."
+                )
+            print(f"  Cache: {result['cache_path']}")
+        elif args.action == "status":
+            result = status_gmail(settings)
+            marker = "✓" if result["ready"] else "✗"
+            print(f"  {marker} Gmail ready: {result['ready']}")
+            if not result["ready"]:
+                print(f"  Reason: {result['reason']}")
+            else:
+                print(f"  Cache present: {result['cache_present']}")
+                if result["missing_labels"]:
+                    print(f"  Missing labels: {', '.join(result['missing_labels'])}")
+        elif args.action == "uninstall":
+            result = uninstall_gmail(settings)
+            if result["removed_cache"]:
+                print("Removed Gmail label cache.")
+            else:
+                print("No Gmail cache to remove.")
+            print(f"  {result['note']}")
+    elif name == "google-calendar":
+        from adzekit.modules.adapters_calendar import (
+            install_calendar,
+            status_calendar,
+            uninstall_calendar,
+        )
+        settings = _resolve_settings(args)
+        if args.action == "install":
+            result = install_calendar(settings)
+            if not result["installed"]:
+                print(
+                    f"Calendar install failed: {result['reason']}", file=sys.stderr,
+                )
+                raise SystemExit(1)
+            print(
+                f"Calendar adapter installed. "
+                f"{result['calendars_total']} calendar(s) found."
+            )
+            if result["primary_id"]:
+                print(f"  Primary: {result['primary_id']}")
+            print(f"  Cache: {result['cache_path']}")
+        elif args.action == "status":
+            result = status_calendar(settings)
+            marker = "✓" if result["ready"] else "✗"
+            print(f"  {marker} Calendar ready: {result['ready']}")
+            if not result["ready"]:
+                print(f"  Reason: {result['reason']}")
+            else:
+                print(f"  Cached calendars: {len(result['calendars'])}")
+        elif args.action == "uninstall":
+            result = uninstall_calendar(settings)
+            if result["removed_cache"]:
+                print("Removed Calendar list cache.")
+            else:
+                print("No Calendar cache to remove.")
     else:
         print(f"Unknown adapter: {name}", file=sys.stderr)
         raise SystemExit(2)
+
+
+# -- calendar (terminal briefing) ------------------------------------------
+
+
+def cmd_calendar(args: argparse.Namespace) -> None:
+    """Print today's calendar briefing to terminal."""
+    from adzekit.modules.adapters_calendar import format_today_briefing
+
+    text = format_today_briefing(calendar_id=args.calendar)
+    print(text)
 
 
 # -- gateway ---------------------------------------------------------------
@@ -1315,7 +1398,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_adapter.add_argument(
         "name",
-        choices=["claude-code"],
+        choices=["claude-code", "gmail", "google-calendar"],
         help="Which adapter to operate on.",
     )
     p_adapter.add_argument(
@@ -1354,6 +1437,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="install: register in settings.json; uninstall: remove; status: report.",
     )
     p_mcp.set_defaults(func=cmd_mcp)
+
+    # calendar
+    p_calendar = sub.add_parser(
+        "calendar",
+        help="Google Calendar utilities (today briefing).",
+    )
+    p_calendar_sub = p_calendar.add_subparsers(dest="calendar_command", required=True)
+    p_calendar_today = p_calendar_sub.add_parser(
+        "today",
+        help="Print today's calendar briefing to terminal.",
+    )
+    p_calendar_today.add_argument(
+        "--calendar",
+        default="primary",
+        help="Calendar ID (default: primary).",
+    )
+    p_calendar_today.set_defaults(func=cmd_calendar)
 
     # insight
     p_insight = sub.add_parser(
