@@ -153,6 +153,7 @@ Skills live in `src/adzekit/skills/` as runtime-agnostic markdown. The Claude Co
 - [Philosophy](docs/philosophy.md) — why these principles, why this design
 - [Roadmap](docs/roadmap.md) — what's done, what's next
 - [Delegation Pattern](docs/delegation-pattern.md) — the adapter contract
+- [Deployment](docs/deployment.md) — running the 24/7 Telegram gateway on a Mac or VPS
 
 ## Mantra
 
