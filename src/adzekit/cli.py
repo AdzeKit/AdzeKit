@@ -455,6 +455,42 @@ def cmd_mcp(args: argparse.Namespace) -> None:
                 )
 
 
+# -- insight ---------------------------------------------------------------
+
+
+def cmd_insight(args: argparse.Namespace) -> None:
+    """Run the insight extractors and write a draft for the given period."""
+    from adzekit.modules.insights import run_insight
+
+    settings = _resolve_settings(args)
+    target = None
+    if args.date:
+        from datetime import date as _date
+        try:
+            target = _date.fromisoformat(args.date)
+        except ValueError as exc:
+            print(f"Error: invalid --date {args.date!r}: {exc}", file=sys.stderr)
+            raise SystemExit(2)
+    try:
+        data, draft_path = run_insight(
+            period=args.period, settings=settings, target=target,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+    if draft_path is None:
+        print("Insight rendered (write skipped).")
+        return
+    print(f"Insight written: {draft_path.relative_to(settings.shed)}")
+    print(f"  window: {data.window_start} → {data.window_end}")
+    print(
+        f"  velocity: {data.velocity.opened} opened / {data.velocity.closed} closed"
+    )
+    print(f"  carry-forwards: {len(data.carry_forwards)}")
+    print(f"  energy samples: {data.energy.samples}")
+    print(f"  top tags: {len(data.tags)}")
+
+
 # -- distill ---------------------------------------------------------------
 
 
@@ -1318,6 +1354,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="install: register in settings.json; uninstall: remove; status: report.",
     )
     p_mcp.set_defaults(func=cmd_mcp)
+
+    # insight
+    p_insight = sub.add_parser(
+        "insight",
+        help="Synthesize accumulated shed data into a reviewable insight draft.",
+    )
+    p_insight.add_argument(
+        "--period",
+        choices=["weekly", "monthly", "quarterly"],
+        default="weekly",
+        help="Time window to extract over (default: weekly).",
+    )
+    p_insight.add_argument(
+        "--date",
+        default=None,
+        help="ISO date (YYYY-MM-DD) inside the target window. Defaults to today.",
+    )
+    p_insight.set_defaults(func=cmd_insight)
 
     # distill
     p_distill = sub.add_parser(

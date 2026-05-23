@@ -44,6 +44,12 @@ SCHEDULES: dict[str, dict] = {
         "minute": 0,
         "weekdays": [5],  # Friday (launchd: 1=Mon, 5=Fri)
     },
+    "insight-weekly": {
+        "command": "insight --period weekly",
+        "hour": 16,
+        "minute": 30,  # 30 min after weekly-review so the day's review is fresh
+        "weekdays": [5],  # Friday
+    },
     "drafts-gc": {
         "command": "drafts gc",
         "hour": 9,
