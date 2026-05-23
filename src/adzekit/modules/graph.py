@@ -120,8 +120,17 @@ def _add_entity(
 ) -> None:
     name = name.lower()
     if name in graph.entities:
-        if source and source not in graph.entities[name].sources:
-            graph.entities[name].sources.append(source)
+        existing = graph.entities[name]
+        if source and source not in existing.sources:
+            existing.sources.append(source)
+        # Upgrade type: if the entity was forward-referenced and stored as the
+        # default CONCEPT, an explicit declaration (TOOL/PERSON/ORG/EVENT/etc)
+        # should win. CONCEPT is treated as the unrefined default.
+        if (
+            existing.entity_type == EntityType.CONCEPT
+            and entity_type != EntityType.CONCEPT
+        ):
+            existing.entity_type = entity_type
     else:
         graph.entities[name] = Entity(
             name=name,
@@ -429,22 +438,31 @@ def _write_relations(graph: KnowledgeGraph, graph_dir: Path) -> None:
     (graph_dir / "relations.md").write_text("".join(lines), encoding="utf-8")
 
 
-def _write_index(graph: KnowledgeGraph, graph_dir: Path) -> None:
-    built = graph.built_at.isoformat() if graph.built_at else "unknown"
-    stats = graph_stats(graph)
-
-    # Degree centrality
-    degree: dict[str, int] = {}
-    for rel in graph.relationships:
-        degree[rel.source] = degree.get(rel.source, 0) + 1
-        degree[rel.target] = degree.get(rel.target, 0) + 1
-    top = sorted(degree.items(), key=lambda x: -x[1])[:5]
-
+def find_orphans(graph: KnowledgeGraph) -> list[str]:
+    """Return entity names that have zero incoming or outgoing relationships."""
     connected = (
         {r.source for r in graph.relationships}
         | {r.target for r in graph.relationships}
     )
-    orphan_names = sorted(n for n in graph.entities if n not in connected)
+    return sorted(n for n in graph.entities if n not in connected)
+
+
+def degree_centrality(graph: KnowledgeGraph) -> dict[str, int]:
+    """Return per-entity edge counts (incoming + outgoing)."""
+    degree: dict[str, int] = {}
+    for rel in graph.relationships:
+        degree[rel.source] = degree.get(rel.source, 0) + 1
+        degree[rel.target] = degree.get(rel.target, 0) + 1
+    return degree
+
+
+def _write_index(graph: KnowledgeGraph, graph_dir: Path) -> None:
+    built = graph.built_at.isoformat() if graph.built_at else "unknown"
+    stats = graph_stats(graph)
+
+    degree = degree_centrality(graph)
+    top = sorted(degree.items(), key=lambda x: -x[1])[:5]
+    orphan_names = find_orphans(graph)
 
     lines = [
         "# Knowledge Graph Index\n\n",
