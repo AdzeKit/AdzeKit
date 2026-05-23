@@ -27,6 +27,13 @@ Thumbs.db
 # Google OAuth credentials
 credentials.json
 token.json
+
+# Shed workbench — defensive: a shed initialized inside this repo (e.g. for
+# manual testing) should never bring its private content into git history.
+# These directories may contain email bodies, Slack messages, Salesforce
+# data captured by skills. The shed's own .gitignore covers them inside the
+# workspace; this defensive copy guards against accidental in-repo sheds.
+drafts/
 stock/
 
 # Binary exports

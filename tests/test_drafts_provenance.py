@@ -56,15 +56,31 @@ def test_write_draft_creates_file_with_header(workspace):
 
 
 def test_write_draft_filename_includes_host_and_time(workspace):
-    fixed = datetime(2026, 5, 22, 8, 14, 0, tzinfo=timezone.utc)
+    # B2: filename now uses HHMMSS to prevent same-minute collisions.
+    fixed = datetime(2026, 5, 22, 8, 14, 7, tzinfo=timezone.utc)
     path = write_draft_with_frontmatter(
         "daily-start",
         body="hello",
         settings=workspace,
         timestamp=fixed,
     )
-    assert path.name.startswith("daily-start-2026-05-22-0814-")
+    assert path.name.startswith("daily-start-2026-05-22-081407-")
     assert path.name.endswith(".md")
+
+
+def test_same_second_collision_appends_counter(workspace):
+    """B2: two writes in the exact same second on the same host don't overwrite."""
+    fixed = datetime(2026, 5, 22, 8, 14, 0, tzinfo=timezone.utc)
+    p1 = write_draft_with_frontmatter("collide", body="a", settings=workspace, timestamp=fixed)
+    p2 = write_draft_with_frontmatter("collide", body="b", settings=workspace, timestamp=fixed)
+    assert p1 != p2
+    assert p1.exists()
+    assert p2.exists()
+    # Second filename has the -1 counter.
+    assert p2.name.endswith("-1.md")
+    # Bodies are distinct (no overwrite).
+    assert "a" in p1.read_text()
+    assert "b" in p2.read_text()
 
 
 def test_write_draft_appends_to_inbox(workspace):

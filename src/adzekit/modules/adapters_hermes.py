@@ -372,18 +372,32 @@ def pull_inferences_from_hermes(
 
 
 def _retarget_inbox(settings: Settings, filename: str, new_path: Path) -> None:
-    """Rewrite an INBOX line so it points at the new path inside drafts/."""
-    inbox = settings.drafts_dir / "INBOX.md"
-    if not inbox.exists():
-        return
-    old = f"`drafts/{filename}`"
+    """Rewrite the INBOX entry so it points at the new draft path.
+
+    Updates the per-entry sidecar at drafts/INBOX.d/{stem}.entry (the post-B1
+    authoritative storage) and regenerates the INBOX.md view. Falls back to a
+    naive str.replace on the legacy INBOX.md when no sidecar is present.
+    """
+    old_marker = f"`drafts/{filename}`"
     try:
         rel = str(new_path.resolve().relative_to(settings.shed.resolve()))
     except ValueError:
         rel = str(new_path)
-    new = f"`{rel}`"
+    new_marker = f"`{rel}`"
+
+    sidecar = settings.drafts_dir / "INBOX.d" / f"{Path(filename).stem}.entry"
+    if sidecar.exists():
+        text = sidecar.read_text(encoding="utf-8")
+        sidecar.write_text(text.replace(old_marker, new_marker), encoding="utf-8")
+        from adzekit.preprocessor import _regenerate_inbox_view
+        _regenerate_inbox_view(settings)
+        return
+
+    inbox = settings.drafts_dir / "INBOX.md"
+    if not inbox.exists():
+        return
     text = inbox.read_text(encoding="utf-8")
-    inbox.write_text(text.replace(old, new), encoding="utf-8")
+    inbox.write_text(text.replace(old_marker, new_marker), encoding="utf-8")
 
 
 def sync_hermes(
