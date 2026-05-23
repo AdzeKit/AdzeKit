@@ -28,9 +28,17 @@ from pathlib import Path
 from adzekit.config import Settings, get_settings
 from adzekit.preprocessor import read_draft_frontmatter, strip_draft_frontmatter
 
-# Filename pattern: <skill>-YYYY-MM-DD-HHMM-<host>.md
+# Filename pattern: <skill>-YYYY-MM-DD-HHMMSS-<host>[-N].md
+# Post-B2 the time portion is HHMMSS (6 digits). Pre-B2 drafts archived
+# before the upgrade may still have HHMM (4 digits); accept either so
+# distillation works across the transition.
 _FILENAME_RE = re.compile(
-    r"^(?P<skill>[a-z0-9-]+?)-(?P<date>\d{4}-\d{2}-\d{2})-(?P<time>\d{4})-(?P<host>[a-z0-9-]+)\.md$"
+    r"^(?P<skill>[a-z0-9-]+?)"
+    r"-(?P<date>\d{4}-\d{2}-\d{2})"
+    r"-(?P<time>\d{4,6})"
+    r"-(?P<host>[a-z0-9-]+?)"
+    r"(?:-\d+)?"  # optional collision suffix
+    r"\.md$"
 )
 
 
@@ -269,15 +277,29 @@ def run_distill(
 
 
 def _retarget_inbox_line(settings: Settings, filename: str, new_path: Path) -> None:
-    """Rewrite the INBOX line for `filename` to point at the new path."""
-    inbox = settings.drafts_dir / "INBOX.md"
-    if not inbox.exists():
-        return
+    """Rewrite the INBOX entry for `filename` to point at the new path.
+
+    Updates the sidecar entry at drafts/INBOX.d/{stem}.entry (post-B1) and
+    regenerates the INBOX.md view. Falls back to legacy INBOX.md replacement
+    when no sidecar is present.
+    """
     old_marker = f"`drafts/{filename}`"
     try:
         rel = str(new_path.resolve().relative_to(settings.shed.resolve()))
     except ValueError:
         rel = str(new_path)
     new_marker = f"`{rel}`"
+
+    sidecar = settings.drafts_dir / "INBOX.d" / f"{Path(filename).stem}.entry"
+    if sidecar.exists():
+        text = sidecar.read_text(encoding="utf-8")
+        sidecar.write_text(text.replace(old_marker, new_marker), encoding="utf-8")
+        from adzekit.preprocessor import _regenerate_inbox_view
+        _regenerate_inbox_view(settings)
+        return
+
+    inbox = settings.drafts_dir / "INBOX.md"
+    if not inbox.exists():
+        return
     text = inbox.read_text(encoding="utf-8")
     inbox.write_text(text.replace(old_marker, new_marker), encoding="utf-8")

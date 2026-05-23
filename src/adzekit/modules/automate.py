@@ -191,25 +191,52 @@ def _generate_plist(
     """).strip() + "\n"
 
 
+class LaunchctlError(RuntimeError):
+    """Raised when a launchctl invocation fails.
+
+    The previous behavior was to silently swallow failures (capture_output=True
+    + no returncode check). That meant `install` could report success while no
+    plist was actually loaded — user trusts the cadence is running and it isn't.
+    """
+
+
 def install(settings: Settings | None = None) -> list[Path]:
     """Generate, write, and load launchd plist files.
 
-    Returns list of installed plist paths.
+    Returns list of installed plist paths. Raises LaunchctlError if any
+    `launchctl load` invocation fails — partial state may exist (plists
+    written to disk but not loaded); subsequent reinstall is safe.
     """
     settings = settings or get_settings()
     LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
 
     installed: list[Path] = []
+    failures: list[str] = []
     for name, schedule in SCHEDULES.items():
         xml = _generate_plist(name, schedule, settings.shed)
         plist_path = LAUNCH_AGENTS_DIR / f"{PLIST_PREFIX}.{name}.plist"
         plist_path.write_text(xml, encoding="utf-8")
 
-        subprocess.run(
+        result = subprocess.run(
             ["launchctl", "load", str(plist_path)],
             capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            failures.append(
+                f"{plist_path.name}: rc={result.returncode}; "
+                f"stderr={result.stderr.strip() or '(empty)'}"
+            )
+            continue
         installed.append(plist_path)
+
+    if failures:
+        raise LaunchctlError(
+            "launchctl load failed for one or more plists:\n  "
+            + "\n  ".join(failures)
+            + "\nVerify with `launchctl list | grep adzekit`; "
+            "common causes: user logged out at install time, SIP, permissions."
+        )
 
     return installed
 
@@ -217,21 +244,70 @@ def install(settings: Settings | None = None) -> list[Path]:
 def uninstall(settings: Settings | None = None) -> list[Path]:
     """Unload and remove launchd plist files.
 
-    Returns list of removed plist paths.
+    Returns list of removed plist paths. Continues on per-plist errors but
+    raises LaunchctlError at the end if any unload reported failure (the
+    plist file is still removed from disk so reinstall is safe).
     """
     settings = settings or get_settings()
     removed: list[Path] = []
+    failures: list[str] = []
 
     for name in SCHEDULES:
         plist_path = LAUNCH_AGENTS_DIR / f"{PLIST_PREFIX}.{name}.plist"
         if not plist_path.exists():
             continue
 
-        subprocess.run(
+        result = subprocess.run(
             ["launchctl", "unload", str(plist_path)],
             capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            # Common case: plist was never loaded (already-unloaded error). We
+            # tolerate this so a partial install can be cleaned up. But
+            # surface a notice so the user knows.
+            failures.append(
+                f"{plist_path.name}: rc={result.returncode}; "
+                f"stderr={result.stderr.strip() or '(empty)'}"
+            )
         plist_path.unlink()
         removed.append(plist_path)
 
+    if failures:
+        # Non-fatal: removal still happened. Surface as warning via the
+        # returned shape; caller decides what to do.
+        # We use a sentinel attribute on the list to communicate this without
+        # changing the public signature.
+        removed = list(removed)  # ensure mutable
+        setattr(removed, "warnings", failures)  # type: ignore[attr-defined]
+
     return removed
+
+
+def verify_loaded(settings: Settings | None = None) -> dict[str, bool]:
+    """Return per-plist load status by querying `launchctl list`.
+
+    Used by `adzekit cadence status` to confirm the install actually took.
+    Failing-open behavior: if launchctl itself fails (unlikely on macOS),
+    returns an empty dict rather than raising.
+    """
+    try:
+        result = subprocess.run(
+            ["launchctl", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {}
+    if result.returncode != 0:
+        return {}
+    loaded_labels = set()
+    for line in result.stdout.splitlines():
+        parts = line.split(maxsplit=2)
+        if len(parts) >= 3 and parts[2].startswith(PLIST_PREFIX):
+            loaded_labels.add(parts[2])
+    return {
+        name: f"{PLIST_PREFIX}.{name}" in loaded_labels
+        for name in SCHEDULES
+    }

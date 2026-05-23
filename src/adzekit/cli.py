@@ -418,16 +418,30 @@ def cmd_automate(args: argparse.Namespace) -> None:
                 print(f"  removed: {p.name}")
             print(f"\n{len(paths)} plist(s) unloaded and removed.")
     elif args.action == "status":
+        from adzekit.modules.automate import verify_loaded
+        loaded = verify_loaded(settings)
         installed_count = 0
+        loaded_count = 0
         for name in SCHEDULES:
             path = LAUNCH_AGENTS_DIR / f"{PLIST_PREFIX}.{name}.plist"
             present = path.exists()
-            marker = "✓" if present else "✗"
-            print(f"  {marker} {name:20s} {path}")
+            is_loaded = loaded.get(name, False)
+            file_marker = "✓" if present else "✗"
+            load_marker = "✓" if is_loaded else "✗"
+            print(f"  file:{file_marker} loaded:{load_marker} {name:20s} {path}")
             if present:
                 installed_count += 1
+            if is_loaded:
+                loaded_count += 1
         guard = in_deep_work_window(settings=settings)
-        print(f"\n{installed_count}/{len(SCHEDULES)} plist(s) installed.")
+        print(f"\n{installed_count}/{len(SCHEDULES)} plist file(s) on disk.")
+        print(f"{loaded_count}/{len(SCHEDULES)} plist(s) loaded into launchd.")
+        if installed_count > loaded_count:
+            print(
+                "Warning: some plists are on disk but not loaded. "
+                "Run `adzekit cadence uninstall && adzekit cadence install` "
+                "(check logout status, SIP, permissions)."
+            )
         print(f"Deep-work window active right now: {guard}")
 
 

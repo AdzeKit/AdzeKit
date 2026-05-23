@@ -176,24 +176,27 @@ def write_draft_with_frontmatter(
 ) -> Path:
     """Write a draft to {SHED}/drafts/ with a provenance HTML-comment header.
 
-    The filename schema is `{skill}-YYYY-MM-DD-HHMM-{host}.md`. Returns the
-    written path. Also appends a single line to drafts/INBOX.md.
+    The filename schema is `{skill}-YYYY-MM-DD-HHMMSS-{host}.md`. The seconds
+    precision protects against same-minute collisions; on a sub-second collision
+    (rare but possible under cron + manual invocation in the same second on the
+    same host), a `-N` counter is appended via O_EXCL retry.
+
+    Returns the written path. Also writes a per-entry INBOX sidecar file at
+    drafts/INBOX.d/{stem}.entry containing the one-line INBOX text, and
+    regenerates drafts/INBOX.md as a human-readable view of all sidecar entries.
 
     Side-effects:
-      - creates drafts/ if it does not exist
-      - writes the draft file
-      - appends to drafts/INBOX.md (creating it with a header line if absent)
+      - creates drafts/ and drafts/INBOX.d/ if they do not exist
+      - writes the draft file (with sub-second collision-safe filename)
+      - writes one sidecar file to drafts/INBOX.d/
+      - regenerates drafts/INBOX.md from the sidecar dir
     """
     settings = settings or get_settings()
     settings.drafts_dir.mkdir(parents=True, exist_ok=True)
 
     ts = timestamp or datetime.now().astimezone()
-    date_part = ts.strftime("%Y-%m-%d")
-    time_part = ts.strftime("%H%M")
     host = short_hostname()
     safe_skill = re.sub(r"[^a-z0-9-]", "-", skill_name.lower()).strip("-")
-    filename = f"{safe_skill}-{date_part}-{time_part}-{host}.md"
-    path = settings.drafts_dir / filename
 
     body_hash = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
     input_lines = _format_inputs(inputs or [], settings)
@@ -222,40 +225,150 @@ def write_draft_with_frontmatter(
     header_lines.append(f"hash: {body_hash}")
     header_lines.append("-->")
     header = "\n".join(header_lines) + "\n"
+    full_content = header + (body if body.endswith("\n") else body + "\n")
 
-    path.write_text(header + body if body.endswith("\n") else header + body + "\n",
-                    encoding="utf-8")
+    # Atomic O_EXCL create with collision retry. The seconds-precision filename
+    # already prevents the common collision (cron + manual invocation in the
+    # same minute); the -N suffix handles same-second collisions defensively.
+    path = _atomic_create_draft(
+        settings.drafts_dir, safe_skill, ts, host, full_content,
+    )
 
-    _append_to_inbox(settings, ts, skill_name, summary, filename)
+    _write_inbox_entry(settings, ts, skill_name, summary, path.name)
     return path
 
 
-def _append_to_inbox(
+def _atomic_create_draft(
+    drafts_dir: Path,
+    safe_skill: str,
+    ts: datetime,
+    host: str,
+    content: str,
+) -> Path:
+    """Create a draft file with O_EXCL; on EEXIST, append -1, -2, ... until unique.
+
+    Filename: {skill}-YYYY-MM-DD-HHMMSS-{host}[-N].md
+    """
+    import os
+    date_part = ts.strftime("%Y-%m-%d")
+    time_part = ts.strftime("%H%M%S")
+    base = f"{safe_skill}-{date_part}-{time_part}-{host}"
+    encoded = content.encode("utf-8")
+    for suffix in ("",) + tuple(f"-{i}" for i in range(1, 1000)):
+        candidate = drafts_dir / f"{base}{suffix}.md"
+        try:
+            fd = os.open(
+                str(candidate),
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o644,
+            )
+        except FileExistsError:
+            continue
+        try:
+            os.write(fd, encoded)
+        finally:
+            os.close(fd)
+        return candidate
+    raise RuntimeError(
+        f"Could not create unique draft filename for {base} after 1000 attempts"
+    )
+
+
+def _write_inbox_entry(
     settings: Settings,
     ts: datetime,
     skill_name: str,
     summary: str,
     filename: str,
 ) -> None:
-    """Append a single line to drafts/INBOX.md."""
-    inbox = settings.drafts_dir / "INBOX.md"
+    """Write a per-entry sidecar to drafts/INBOX.d/ + regenerate INBOX.md view.
+
+    Each new draft gets its own sidecar file `drafts/INBOX.d/{stem}.entry`
+    containing the one-line INBOX text. This eliminates the shared-mutation
+    race that plagued the old `drafts/INBOX.md` append. Cross-machine git
+    merges are conflict-free: per-entry files have unique names (HHMMSS-host
+    suffix), so two machines writing the same morning produce two distinct
+    sidecar files that merge cleanly.
+
+    `drafts/INBOX.md` is regenerated from the sidecar dir each time as a
+    human-readable view. It is intentionally NOT the source of truth.
+    """
+    inbox_d = settings.drafts_dir / "INBOX.d"
+    inbox_d.mkdir(parents=True, exist_ok=True)
+
     line_summary = f" · {summary}" if summary else ""
     line = (
         f"- [ ] {ts.strftime('%Y-%m-%d %H:%M')} {skill_name}{line_summary}"
         f" · `drafts/{filename}`\n"
     )
-    if not inbox.exists():
-        inbox.write_text("# Draft Inbox\n\n" + line, encoding="utf-8")
+    stem = Path(filename).stem
+    entry_path = inbox_d / f"{stem}.entry"
+    entry_path.write_text(line, encoding="utf-8")
+
+    _regenerate_inbox_view(settings)
+
+
+def _regenerate_inbox_view(settings: Settings) -> None:
+    """Atomically rewrite drafts/INBOX.md from sidecar entries.
+
+    The view is sorted by the entry's date/time prefix so newer drafts
+    appear later, matching the original append order. If no sidecar
+    entries exist, INBOX.md is removed.
+
+    Each call writes to a per-call unique tempfile and atomically renames
+    onto INBOX.md so concurrent regenerations don't race on a shared tmp
+    name. The final state may be a stale-but-consistent view (last
+    rename wins); the underlying sidecar files are the source of truth so
+    no data is lost — only the rendered view might lag for one tick.
+    """
+    import os
+    import tempfile
+
+    inbox_d = settings.drafts_dir / "INBOX.d"
+    inbox_md = settings.drafts_dir / "INBOX.md"
+
+    if not inbox_d.exists():
         return
-    existing = inbox.read_text(encoding="utf-8")
-    if not existing.endswith("\n"):
-        existing += "\n"
-    inbox.write_text(existing + line, encoding="utf-8")
+
+    entries = sorted(inbox_d.glob("*.entry"), key=lambda p: p.name)
+    if not entries:
+        if inbox_md.exists():
+            try:
+                inbox_md.unlink()
+            except FileNotFoundError:
+                pass
+        return
+
+    lines = ["# Draft Inbox", ""]
+    for entry in entries:
+        try:
+            text = entry.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            # Another thread just removed this sidecar; skip it.
+            continue
+        lines.append(text.rstrip("\n"))
+    rendered = "\n".join(lines) + "\n"
+
+    fd, tmp_name = tempfile.mkstemp(
+        prefix="INBOX.", suffix=".tmp", dir=str(settings.drafts_dir),
+    )
+    try:
+        os.write(fd, rendered.encode("utf-8"))
+    finally:
+        os.close(fd)
+    Path(tmp_name).replace(inbox_md)
 
 
+# B3: the closing `-->` must appear on its own line (with optional whitespace),
+# not embedded inside a header field. This prevents truncation when a `summary:`
+# or `parent:` field happens to contain the literal `-->` substring, and it
+# correctly excludes body content (the body comes after the closing line, so
+# any `-->` in a markdown code block is never reached because the parser stops
+# at the FIRST line that is just `-->`).
 _DRAFT_HEADER_RE = re.compile(
-    r"\A<!--\s*adzekit-draft\s*\n(.*?)\n-->\s*\n?",
-    re.DOTALL,
+    r"\A<!--[ \t]*adzekit-draft[ \t]*\n"
+    r"((?:.*\n)*?)"
+    r"-->[ \t]*(?:\n|\Z)",
 )
 
 
