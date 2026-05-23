@@ -78,5 +78,5 @@ land in `drafts/skill-proposals/`; the human reviews and promotes.
   noise, not a pattern"). Skill reads this file if present.
 - Cadence: distill runs weekly by default (Friday afternoon, alongside weekly-review). The
   cadence layer wires this up.
-- For Hermes adapter: distill is a low-frequency, batch-style skill. No delegation needed;
-  one Hermes session handles the full run.
+- Distill is a low-frequency, batch-style skill. No sub-agent delegation needed; one
+  session handles the full run.

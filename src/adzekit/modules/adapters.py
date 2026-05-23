@@ -1,17 +1,19 @@
 """Adapter installation helpers.
 
-AdzeKit ships several adapters that wrap the runtime-agnostic core for
-specific host runtimes. Each adapter has its own install/uninstall/status
-contract; this module is the dispatch + shared utilities layer.
+AdzeKit ships adapter modules that wrap the runtime-agnostic core for
+specific host runtimes or integrations. Each adapter has its own
+install/uninstall/status contract; this module is the dispatch + shared
+utilities layer.
 
 Currently implemented adapters:
 - claude-code: copies skills into the Claude Code plugin layout, links the
   plugin into the user's local plugin tree.
-- rclone: wires the workspace's stock/ and drafts/ to a cloud remote
-  (delegates to the existing rclone code in config.py).
-- hermes: builds a Hermes-compatible skill pack from the core skills and
-  translates knowledge/soul.md to ~/.hermes/SOUL.md. The actual install into
-  Hermes' skill registry is stubbed pending Hermes being available locally.
+
+Planned adapters (Phase 2+):
+- telegram: long-running gateway daemon bridging Telegram messages to a
+  Claude Code session via the Runner abstraction (`gateway/runner.py`).
+- gmail, google-calendar: thin wrappers around `gcloud auth` token + REST
+  API access for the existing skill flows.
 """
 
 from __future__ import annotations

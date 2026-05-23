@@ -338,7 +338,7 @@ The shed's voice file. Contains voice, values, non-negotiables, and declared dee
 09:00-11:00 America/Edmonton
 ```
 
-Sections are parsed by level-2 headings (`## Section Name`). Adapters may translate `Deep work hours` into runtime-specific scheduling (Hermes adapter writes a Hermes SOUL.md; cadence layer respects the window). The schema is *suggested*, not enforced — extra sections are ignored, missing sections produce empty values.
+Sections are parsed by level-2 headings (`## Section Name`). The cadence layer respects `Deep work hours` (silent draft writes, notifications deferred until the window closes). The schema is *suggested*, not enforced — extra sections are ignored, missing sections produce empty values.
 
 ## Stock
 
@@ -422,14 +422,14 @@ Skills producing many proposals may consolidate into a single patch file (`draft
 
 ## Daily-Note Session Footer (optional)
 
-Daily notes accumulate a `> Sessions:` blockquote footer that records every agent session which touched the shed that day. The Hermes adapter writes Hermes session IDs; the Claude Code adapter writes Claude Code session identifiers. This is the *only* persistent record of agent activity at the day level.
+Daily notes accumulate a `> Sessions:` blockquote footer that records every agent session which touched the shed that day. Adapters write their runtime's native session identifier (e.g., a Claude Code session UUID). This is the *only* persistent record of agent activity at the day level.
 
 ```markdown
 > End: ...
 
 > Sessions:
-> - hermes:abc123 08:14-08:42 /daily-start -> drafts/daily-start-2026-05-22-0814-laptop.md
-> - hermes:def456 11:02-11:05 /capture
+> - claude-code:8e22-7f3a 08:14-08:42 /daily-start -> drafts/daily-start-2026-05-22-081400-laptop.md
+> - claude-code:b91d-04ce 11:02-11:05 /capture
 > - claude-code:session-7f3a 14:20-14:45 /weekly-review -> drafts/weekly-2026-W21-laptop.md
 ```
 

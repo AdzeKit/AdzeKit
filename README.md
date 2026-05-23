@@ -14,7 +14,7 @@ You haven't evolved much since the Pleistocene. The cortex still chokes on paral
 
 **The Skills** — runtime-agnostic markdown skill specs in `src/adzekit/skills/`. Each skill describes *what* needs to happen (Goal / Inputs / Process / Outputs); adapters describe *how* their host runtime executes it.
 
-**The Adapters** — `adapters/claude-code/` is the first execution profile. A Hermes adapter is planned (see [docs/hermes-integration.md](docs/hermes-integration.md)). Any agent runtime that supports isolated sub-agent execution and structured-output workers can wrap the same core skills.
+**The Adapters** — `adapters/claude-code/` is the runtime. Other `adapters/<name>/` directories will host integrations (Telegram bridge, Gmail, Calendar, etc.) — each composable, each independently install/uninstall/status.
 
 ## Install
 
@@ -93,7 +93,7 @@ adzekit/
 ├── src/adzekit/skills/        runtime-agnostic skill specs (markdown)
 ├── src/adzekit/                pure-Python CLI, parser, modules — zero LLM calls
 ├── adapters/claude-code/       Claude Code execution profile (plugin agents, slash commands)
-├── adapters/hermes/            (planned) Hermes execution profile
+├── adapters/<integration>/     (planned) Telegram bridge, Gmail, Calendar, …
 ├── backbone-spec/              the shed contract — file layout, frontmatter, provenance
 └── docs/                       philosophy, roadmap, integration designs
 ```
@@ -153,7 +153,6 @@ Skills live in `src/adzekit/skills/` as runtime-agnostic markdown. The Claude Co
 - [Philosophy](docs/philosophy.md) — why these principles, why this design
 - [Roadmap](docs/roadmap.md) — what's done, what's next
 - [Delegation Pattern](docs/delegation-pattern.md) — the adapter contract
-- [Hermes Integration](docs/hermes-integration.md) — designing the multi-runtime setup
 
 ## Mantra
 

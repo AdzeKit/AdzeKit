@@ -58,7 +58,7 @@ The best system is useless if it depends on you remembering to use it. Willpower
 
 **The rule:** The system surfaces what matters on a cadence. You approve, edit, or dismiss. Two decisions a day: accept the morning briefing, approve the evening close.
 
-**How:** launchd plists (Mac) or Hermes cron (multi-platform) schedule `/daily-start`, `/daily-close`, and `/weekly-review` automatically. Drafts land in `drafts/INBOX.md`. The deep-work guard suppresses notifications during your declared focus window — system writes silently, surfaces later.
+**How:** launchd plists (macOS) schedule `/daily-start`, `/daily-close`, and `/weekly-review` automatically. Drafts land in `drafts/INBOX.md`. The deep-work guard suppresses notifications during your declared focus window — system writes silently, surfaces later.
 
 ---
 
@@ -80,7 +80,7 @@ Source-monitoring research (Johnson 1993) shows humans confuse *generated* conte
 
 **The rule:** Every artifact an agent produces carries a provenance header — which skill, which inputs (with content hashes), which parent draft, which session. You should never have to *remember* where a draft came from to trust it.
 
-**How:** `drafts/` files have a `<!-- adzekit-draft -->` HTML-comment header recording skill, trigger, input file SHAs, parent draft, and a body hash. Re-running the same skill on the same inputs produces the same hash — reproducibility is a checkbox. Daily notes accumulate a `> Sessions:` footer listing every agent session that touched the shed that day. The Hermes adapter (planned) translates this into Hermes' SOUL.md and session-DB models; the Claude Code adapter uses its native session IDs.
+**How:** `drafts/` files have a `<!-- adzekit-draft -->` HTML-comment header recording skill, trigger, input file SHAs, parent draft, and a body hash. Re-running the same skill on the same inputs produces the same hash — reproducibility is a checkbox. Daily notes accumulate a `> Sessions:` footer listing every agent session that touched the shed that day, identified by the runtime's native session ID.
 
 ---
 
@@ -111,7 +111,7 @@ The pitch isn't anti-AI. It's anti-opacity. Markdown shed > vector store. Review
 
 ### Runtime-Agnostic by Design
 
-Skills are plain markdown (Goal / Inputs / Process / Outputs format). Adapters translate to host-runtime primitives. Claude Code is the first adapter; Hermes is planned. The substrate doesn't care which agent you're talking to — your shed is the same.
+Skills are plain markdown (Goal / Inputs / Process / Outputs format). Adapters translate to host-runtime primitives. Claude Code is the runtime; the adapter pattern lets future runtimes (or new integrations like Telegram, Gmail, Calendar) plug in without changing core skill text.
 
 ### Your Kit Is Yours
 
@@ -139,7 +139,7 @@ The backbone/workbench split exists to enforce one rule: AI never writes to your
 - **Zeigarnik Effect** — open commitments consume cognitive resources until resolved
 - **Karpathy LLM Wiki / Graphify** — compile knowledge into an explicit graph; query structure, not similarity
 - **Associative memory** — the brain stores knowledge as typed relational networks, not keyword indexes
-- **Nous Research Hermes** — skill distillation, session lineage, SOUL.md personality layer, cadence-based always-on patterns
+- **Skill distillation, persistent session lineage, voice/values config (`soul.md`), cadence-based always-on patterns** — borrowed from prior art on long-running agent runtimes; implemented natively against markdown rather than a runtime-specific schema
 - **Woodworking** — the adze shapes wood by removing what doesn't belong. The shed is your workshop, the stock is raw lumber, the adze is your hand-tool.
 
 ---

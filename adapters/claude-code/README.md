@@ -4,9 +4,9 @@ The Claude Code execution profile for AdzeKit. Wraps the runtime-agnostic core s
 (`src/adzekit/skills/*.md`) in Claude Code's plugin primitives: slash commands, plugin
 agents, the `Agent` tool for sub-agent fan-out.
 
-This is one of N planned adapters. The Hermes adapter (planned `adapters/hermes/`) wraps
-the same core skills using `delegate_tool` instead of `Agent`. Skills don't change between
-adapters — only the execution mechanics do.
+Claude Code is AdzeKit's runtime. Sibling `adapters/<integration>/` directories host
+*integration* adapters (Telegram bridge, Gmail, Calendar, etc.) — composable plugins
+that the Claude Code session can consume via MCP or skill-side tools.
 
 ## Layout
 
