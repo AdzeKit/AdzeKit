@@ -1,14 +1,15 @@
 """AdzeKit CLI -- command-line interface for operating on any backbone-conforming shed.
 
 Usage:
-    adzekit init [path]          Initialize a new shed at path (default: cwd)
-    adzekit today                Open or create today's daily note
-    adzekit add-loop             Add a loop to open.md
-    adzekit status               Show shed health summary
-    adzekit sync [pull|push]     Sync stock/ and drafts/ via rclone
-    adzekit setup-sync           Configure rclone for Google Drive sync
-    adzekit serve                Start the local web UI
-    adzekit agent <message>      Run the agent with a one-shot message
+    adzekit init [path]                    Initialize a new shed at path (default: cwd)
+    adzekit use-workspace <url>            Clone/update a git workspace and set it as shed
+    adzekit today                          Open or create today's daily note
+    adzekit add-loop                       Add a loop to open.md
+    adzekit status                         Show shed health summary
+    adzekit sync [pull|push]               Sync shed via git and rclone (stock/ + drafts/)
+    adzekit setup-sync                     Configure rclone for Google Drive sync
+    adzekit serve                          Start the local web UI
+    adzekit agent <message>                Run the agent with a one-shot message
 """
 
 import argparse
@@ -460,6 +461,20 @@ def cmd_calendar(args: argparse.Namespace) -> None:
 
 def cmd_gateway(args: argparse.Namespace) -> None:
     """Start the gateway daemon (Telegram bridge by default)."""
+    import os
+    from pathlib import Path as _Path
+
+    # Auto-load ~/.config/adzekit/gateway.env if present and vars not already set.
+    gateway_env = _Path.home() / ".config" / "adzekit" / "gateway.env"
+    if gateway_env.exists():
+        for _line in gateway_env.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if not _line or _line.startswith("#"):
+                continue
+            _key, _sep, _val = _line.partition("=")
+            if _sep and _key not in os.environ:
+                os.environ[_key] = _val
+
     if args.transport != "telegram":
         print(f"Unknown gateway transport: {args.transport}", file=sys.stderr)
         raise SystemExit(2)
@@ -1041,35 +1056,97 @@ def cmd_set_shed(args: argparse.Namespace) -> None:
     print("No need to set ADZEKIT_SHED in your environment.")
 
 
+# -- use-workspace ---------------------------------------------------------
+
+
+def cmd_use_workspace(args: argparse.Namespace) -> None:
+    """Clone or update a git-backed workspace and register it as the active shed."""
+    from adzekit.config import Settings, set_global_shed
+
+    git_url: str = args.url
+
+    repo_name = git_url.rstrip("/").split("/")[-1]
+    if repo_name.endswith(".git"):
+        repo_name = repo_name[:-4]
+
+    local_path = Path(args.path).expanduser() if args.path else Path.home() / repo_name
+
+    if local_path.exists() and (local_path / ".git").is_dir():
+        print(f"Updating existing workspace at {local_path} ...")
+        subprocess.run(
+            ["git", "-C", str(local_path), "pull", "--ff-only"],
+            check=True,
+        )
+    else:
+        print(f"Cloning {git_url} -> {local_path} ...")
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", git_url, str(local_path)], check=True)
+
+    set_global_shed(local_path)
+    print(f"Shed set to: {local_path}")
+
+    settings = Settings(shed=local_path)
+    if settings.is_initialized:
+        if not settings.git_repo:
+            settings.set_config("git_repo", git_url)
+            print(f"Recorded git_repo = {git_url}")
+        rclone_remote = getattr(args, "rclone_remote", None)
+        if rclone_remote and not settings.rclone_remote:
+            settings.set_config("rclone_remote", rclone_remote)
+            print(f"Recorded rclone_remote = {rclone_remote}")
+    else:
+        print(f"\nNote: {local_path} is not yet an AdzeKit shed.")
+        print(f"  Run: adzekit --shed {local_path} init")
+
+    print("\nDone. Run 'adzekit sync' to pull latest.")
+
+
 # -- sync ------------------------------------------------------------------
 
 
 def cmd_sync(args: argparse.Namespace) -> None:
-    """Sync stock/ and drafts/ with the rclone remote, then refresh tag snippets."""
+    """Sync shed via git (backbone) and rclone (stock/ + drafts/), then refresh tags."""
     from adzekit.modules.tags import generate_cursor_snippets
 
     settings = _resolve_settings(args)
-
     direction = getattr(args, "direction", None)
 
     if direction in (None, "pull"):
-        print("Pulling stock/ and drafts/ from remote (stock is additive-only)...")
-        settings.sync_workbench()
+        if settings.is_git_backed:
+            print("Pulling backbone from git...")
+            try:
+                settings.sync_shed()
+                print("  git pull done.")
+            except subprocess.CalledProcessError as exc:
+                print(f"  git pull failed: {exc.stderr.strip()}")
+        if settings.has_rclone_remote:
+            print("Pulling stock/ and drafts/ from rclone remote...")
+            settings.sync_workbench()
+            print("  rclone pull done.")
         if direction == "pull":
             generate_cursor_snippets(settings)
             print("Pull complete. Tag snippets refreshed.")
             return
 
     if direction in (None, "push"):
-        print("Pushing stock/ and drafts/ to remote...")
-        settings.push_workbench()
+        if settings.has_rclone_remote:
+            print("Pushing stock/ and drafts/ to rclone remote...")
+            settings.push_workbench()
+            print("  rclone push done.")
+        if settings.is_git_backed:
+            print("Committing and pushing backbone to git...")
+            try:
+                committed = settings.commit_shed()
+                print("  Committed and pushed." if committed else "  Nothing to commit.")
+            except subprocess.CalledProcessError as exc:
+                print(f"  git push failed: {exc.stderr.strip()}")
         if direction == "push":
             generate_cursor_snippets(settings)
             print("Push complete. Tag snippets refreshed.")
             return
 
     generate_cursor_snippets(settings)
-    print("Sync complete (pull + push). Tag snippets refreshed.")
+    print("Sync complete. Tag snippets refreshed.")
 
 
 # -- setup-sync ------------------------------------------------------------
@@ -1252,7 +1329,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.set_defaults(func=cmd_export)
 
     # sync
-    p_sync = sub.add_parser("sync", help="Sync stock/ and drafts/ via rclone.")
+    # use-workspace
+    p_use_ws = sub.add_parser(
+        "use-workspace",
+        help="Clone/update a git workspace and register it as the active shed.",
+    )
+    p_use_ws.add_argument("url", help="Git URL of the workspace repo.")
+    p_use_ws.add_argument(
+        "--path",
+        default=None,
+        help="Local path for the workspace (default: ~/<repo-name>).",
+    )
+    p_use_ws.add_argument(
+        "--rclone-remote",
+        default=None,
+        dest="rclone_remote",
+        help="rclone remote base path for stock/drafts (e.g. 'gdrive:adzekit').",
+    )
+    p_use_ws.set_defaults(func=cmd_use_workspace)
+
+    p_sync = sub.add_parser(
+        "sync",
+        help="Sync shed via git (backbone) and rclone (stock/ + drafts/).",
+    )
     p_sync.add_argument(
         "direction",
         nargs="?",
