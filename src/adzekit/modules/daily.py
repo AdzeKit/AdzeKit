@@ -362,9 +362,6 @@ def daily_start(
 ## Log
 
 ## Reflection
-- **Finished:**
-- **Blocked:**
-- **Tomorrow:**
 """
     _atomic_write(path, content)
 

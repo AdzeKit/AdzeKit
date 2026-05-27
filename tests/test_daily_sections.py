@@ -18,8 +18,6 @@ def test_parser_extracts_triage_section():
         "## Log\n"
         "- 09:00 stuff\n\n"
         "## Reflection\n"
-        "- **Finished:** the report\n"
-        "- **Tomorrow:** ship it\n"
     )
     note = parse_daily_note(text, date(2026, 5, 22))
     assert any("OVERDUE 12d: Manulife POC" in line for line in note.triage)
@@ -28,8 +26,6 @@ def test_parser_extracts_triage_section():
     assert note.intentions[0].description == "Top priority"
     assert len(note.log) == 1
     assert note.log[0].time == "09:00"
-    assert "the report" in note.finished
-    assert "ship it" in note.tomorrow
 
 
 def test_parser_canonical_section_names():
@@ -38,11 +34,10 @@ def test_parser_canonical_section_names():
         "## Triage\n"
         "## Intention\n- [ ] Item\n"
         "## Log\n"
-        "## Reflection\n- **Tomorrow:** Tomorrow item\n"
+        "## Reflection\n"
     )
     note = parse_daily_note(text, date(2026, 5, 22))
     assert len(note.intentions) == 1
-    assert "Tomorrow item" in note.tomorrow
 
 
 def test_parser_legacy_headings_still_work():

@@ -32,9 +32,6 @@ class TestDailyStart:
             "- [x] Already done\n\n"
             "## Log\n\n"
             "## Reflection\n"
-            "- **Finished:**\n"
-            "- **Blocked:**\n"
-            "- **Tomorrow:** Do next thing\n"
         )
 
         path, summary = daily_start(settings=workspace)
@@ -42,7 +39,6 @@ class TestDailyStart:
         assert "Carry this forward" in content
         assert "Already done" not in content
         assert summary["carried_count"] == 1
-        assert summary["tomorrow_count"] == 1
 
     def test_includes_overdue_loops(self, workspace):
         yesterday = date.today() - timedelta(days=1)
@@ -104,9 +100,6 @@ class TestDailyStart:
             "- [ ] Weekend carry\n\n"
             "## Log\n\n"
             "## Reflection\n"
-            "- **Finished:**\n"
-            "- **Blocked:**\n"
-            "- **Tomorrow:**\n"
         )
 
         path, summary = daily_start(target_date=today, settings=workspace)
@@ -115,6 +108,7 @@ class TestDailyStart:
 
     def test_deduplicates_tasks(self, workspace):
         yesterday = date.today() - timedelta(days=1)
+        today = date.today()
         workspace.daily_dir.mkdir(parents=True, exist_ok=True)
         note = workspace.daily_dir / f"{yesterday.isoformat()}.md"
         note.write_text(
@@ -123,7 +117,11 @@ class TestDailyStart:
             "- [ ] Same task name\n\n"
             "## Log\n\n"
             "## Reflection\n"
-            "- **Tomorrow:** Same task name\n"
+        )
+        # Same item also lives as a due-today loop — should not be duplicated.
+        workspace.loops_active.write_text(
+            "# Active Loops\n\n"
+            f"- [ ] (S) [{today.isoformat()}] Same task name ({today.isoformat()})\n"
         )
 
         path, _ = daily_start(settings=workspace)
@@ -154,9 +152,6 @@ class TestDailyClose:
             "## Log\n"
             "- 09:00 Did stuff\n\n"
             "## Reflection\n"
-            "- **Finished:**\n"
-            "- **Blocked:**\n"
-            "- **Tomorrow:**\n"
         )
 
         success, summary = daily_close(settings=workspace)

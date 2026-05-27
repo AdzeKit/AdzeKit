@@ -71,9 +71,6 @@ Output goes to `{SHED}/drafts/daily-YYYY-MM-DD.md` for human review. The human m
    ## Log
 
    ## Reflection
-   - **Finished:**
-   - **Blocked:**
-   - **Tomorrow:**
    ```
    Always include all four headings, even when sections are empty. The structure is the
    product — predictable layout is what makes the day scannable. Daily entries get
