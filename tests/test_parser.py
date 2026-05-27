@@ -136,7 +136,7 @@ class TestParseDailyNote:
         text = """\
 # 2026-02-15 Sunday
 
-## Morning: Intention
+## Intention
 - [ ] Deep work: Project X (2h block, 9-11am)
 - [ ] Close loop: Client Y estimate
 - [x] Review: Open loops > 48h old
@@ -146,10 +146,8 @@ class TestParseDailyNote:
 - 10:30 Call with Jane re: timeline
 - 14:00 Drafted estimate, sent for review
 
-## Evening: Reflection
-- **Finished:** API design doc v1
-- **Blocked:** Waiting on security review
-- **Tomorrow:** Client Z kickoff, finish estimate
+## Reflection
+Solid focus day. API doc landed.
 """
         daily = parse_daily_note(text, date(2026, 2, 15))
         assert daily.date == date(2026, 2, 15)
@@ -158,9 +156,6 @@ class TestParseDailyNote:
         assert len(daily.log) == 3
         assert daily.log[0].time == "09:15"
         assert daily.log[0].text == "Started API design doc"
-        assert daily.finished == ["API design doc v1"]
-        assert daily.blocked == ["Waiting on security review"]
-        assert daily.tomorrow == ["Client Z kickoff, finish estimate"]
 
     def test_empty_daily_note(self):
         daily = parse_daily_note("", date(2026, 1, 1))

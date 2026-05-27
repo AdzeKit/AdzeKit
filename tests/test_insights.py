@@ -391,9 +391,7 @@ def _populate_synthetic_shed(workspace) -> date:
             "## Log\n"
             "- 09:00 #deep-work block\n"
             "- 10:30 acme follow-up\n\n"
-            "## Reflection\n"
-            f"- **Finished:** something for day {i}\n"
-            "- **Blocked:** morning email overwhelm\n\n"
+            "## Reflection\n\n"
             f"> End: Energy {energy}/5. okay day.\n",
             encoding="utf-8",
         )

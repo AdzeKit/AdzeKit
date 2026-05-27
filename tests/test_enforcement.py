@@ -162,7 +162,7 @@ class TestDailyCloseEnforcement:
             "## Triage (must resolve before daily-close)\n"
             "- [ ] OVERDUE 5d: thing → kill / defer / promote\n\n"
             "## Morning: Intention\n- [ ] do stuff\n\n"
-            "## Log\n\n## Evening: Reflection\n- **Finished:**\n"
+            "## Log\n\n## Evening: Reflection\n"
         )
         ok, summary = daily_close(settings=workspace)
         assert ok is False
@@ -181,7 +181,7 @@ class TestDailyCloseEnforcement:
             "## Triage (must resolve before daily-close)\n"
             "- [x] OVERDUE 10d: Stale promise → kill\n\n"
             "## Morning: Intention\n- [ ] do stuff\n\n"
-            "## Log\n\n## Evening: Reflection\n- **Finished:**\n"
+            "## Log\n\n## Evening: Reflection\n"
         )
         ok, summary = daily_close(settings=workspace)
         assert ok is True

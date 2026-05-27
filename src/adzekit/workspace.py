@@ -176,9 +176,6 @@ def create_daily_note(
 ## Log
 
 ## Reflection
-- **Finished:**
-- **Blocked:**
-- **Tomorrow:**
 """
     path.write_text(template, encoding="utf-8")
     return path
