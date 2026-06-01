@@ -689,6 +689,29 @@ def cmd_review(args: argparse.Namespace) -> None:
     print(path)
 
 
+def cmd_weekly_review(args: argparse.Namespace) -> None:
+    """Cull the shed and write this week's pulse summary."""
+    from adzekit.modules.weekly import run_weekly_review
+
+    settings = _resolve_settings(args)
+    target = date.fromisoformat(args.date) if args.date else None
+    summary = run_weekly_review(settings, target=target)
+
+    if summary["bench_cleared"]:
+        print(f"  cleared {summary['bench_cleared']} processed/orphan item(s) from bench")
+    if summary["bench_added"]:
+        print(f"  added {summary['bench_added']} new draft(s) to bench")
+    if summary["archived_dailies"]:
+        print(
+            f"  archived {len(summary['archived_dailies'])} daily note(s) "
+            f"to {settings.daily_archive_dir}"
+        )
+
+    print(f"Weekly Review — {summary['week_label']}")
+    print(f"  window: {summary['window_start']} → {summary['window_end']}")
+    print(f"  pulse:  {summary['pulse_path'].relative_to(settings.shed)}")
+
+
 # -- sweep -----------------------------------------------------------------
 
 
@@ -1264,6 +1287,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Date within the target week (YYYY-MM-DD, default: today).",
     )
     p_review.set_defaults(func=cmd_review)
+
+    # weekly-review
+    p_weekly = sub.add_parser(
+        "weekly-review",
+        help="Cull the shed and write this week's pulse summary.",
+    )
+    p_weekly.add_argument(
+        "--date",
+        default=None,
+        help="Date within the target week (YYYY-MM-DD, default: today).",
+    )
+    p_weekly.set_defaults(func=cmd_weekly_review)
 
     # sweep
     p_sweep = sub.add_parser("sweep", help="Move [x] loops from active.md to archive.md.")

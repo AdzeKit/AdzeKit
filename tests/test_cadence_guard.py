@@ -110,8 +110,12 @@ def test_schedules_contain_core_rituals():
     assert "drafts-gc" in SCHEDULES
 
 
-def test_weekly_review_runs_on_friday():
-    assert SCHEDULES["weekly-review"]["weekdays"] == [5]
+def test_weekly_review_runs_on_friday_at_1730():
+    sched = SCHEDULES["weekly-review"]
+    assert sched["weekdays"] == [5]
+    assert sched["hour"] == 17
+    assert sched["minute"] == 30
+    assert sched["command"] == "weekly-review"
 
 
 def test_drafts_gc_supports_multi_word_command():

@@ -261,7 +261,7 @@ class TestArchiveOldDailies:
 
     def test_uses_default_threshold(self, workspace):
         today = date.today()
-        boundary = today - timedelta(days=29)
+        boundary = today - timedelta(days=13)
         path = workspace.daily_dir / f"{boundary.isoformat()}.md"
         path.write_text("# Boundary\n")
 
