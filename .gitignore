@@ -33,7 +33,16 @@ token.json
 # These directories may contain email bodies, Slack messages, Salesforce
 # data captured by skills. The shed's own .gitignore covers them inside the
 # workspace; this defensive copy guards against accidental in-repo sheds.
+.adzekit
+bench.md
+inbox.md
+daily/
 drafts/
+graph/
+knowledge/
+loops/
+projects/
+reviews/
 stock/
 
 # Binary exports
