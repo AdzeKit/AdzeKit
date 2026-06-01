@@ -39,9 +39,9 @@ SCHEDULES: dict[str, dict] = {
         "weekdays": [1, 2, 3, 4, 5],
     },
     "weekly-review": {
-        "command": "review",
-        "hour": 16,
-        "minute": 0,
+        "command": "weekly-review",
+        "hour": 17,
+        "minute": 30,
         "weekdays": [5],  # Friday (launchd: 1=Mon, 5=Fri)
     },
     "insight-weekly": {

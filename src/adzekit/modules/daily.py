@@ -20,7 +20,7 @@ from adzekit.parser import parse_daily_note
 _TASK_RE = re.compile(r"^-\s+\[([ xX])\]\s+(.+)$")
 _DAILY_FILENAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
 
-DAILY_ARCHIVE_DAYS = 30
+DAILY_ARCHIVE_DAYS = 14
 
 # Triage line: `- [ ] OVERDUE 23d: Manulife KARL POC ticket → kill / defer / promote`
 # After resolution: `- [x] OVERDUE 23d: Manulife KARL POC ticket → kill`
