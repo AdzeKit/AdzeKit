@@ -48,6 +48,28 @@ _TAG = re.compile(r"#([a-z][a-z0-9-]{0,49})", re.IGNORECASE)
 # e.g. alice-chen, ryan-bondaria, andrey-karpathy
 _PERSON_TAG = re.compile(r"^[a-z]+-[a-z]+(-[a-z]+)*$")
 
+# Domain keyword tokens that disqualify a hyphenated tag from being a person
+# name. Without this, tech tags like `ai-gateway`, `azure-apim`, `arc-resources`,
+# `lululemon-ai-taskforce` all match _PERSON_TAG and get mistyped as people,
+# which in turn generates garbage "firstname lastname" aliases downstream.
+_NON_PERSON_TOKENS = {
+    "ai", "ml", "llm", "genai", "gen", "azure", "aws", "gcp", "uc", "dbsql",
+    "db", "api", "apim", "mcp", "poc", "prism", "apa", "agent",
+    "resources", "taskforce", "days", "governance", "privacy", "gateway",
+    "classify", "query", "epl", "functions", "interoperability",
+    "aiprivacy", "aigovernance",
+}
+
+
+def _looks_like_person(tag: str) -> bool:
+    """True only for tags that plausibly name a person (firstname-lastname[-...]).
+
+    Assumes ``tag`` already matched _PERSON_TAG (all-alpha, hyphenated). Rejects
+    any tag containing a known domain keyword token, so concept/tool/project
+    tags don't get mistyped as people.
+    """
+    return not any(part in _NON_PERSON_TOKENS for part in tag.split("-"))
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -231,7 +253,7 @@ def _extract_projects(
                 tag = m.group(1).lower()
                 if tag == slug:
                     continue  # self-tag (project file references its own slug)
-                if _PERSON_TAG.match(tag):
+                if _PERSON_TAG.match(tag) and _looks_like_person(tag):
                     _ensure_entity(graph, tag, EntityType.PERSON)
                     graph.relationships.append(Relationship(
                         source=slug,
@@ -274,8 +296,14 @@ def _extract_person_tags(
                 continue
             for m in _TAG.finditer(content):
                 tag = m.group(1).lower()
-                if _PERSON_TAG.match(tag):
-                    _add_entity(graph, tag, EntityType.PERSON, rel_path)
+                if not (_PERSON_TAG.match(tag) and _looks_like_person(tag)):
+                    continue
+                # Don't reclassify a tag already typed as a concept/tool/project/
+                # org (e.g. #ai-governance, which has a knowledge note) into a person.
+                existing = graph.entities.get(tag)
+                if existing and existing.entity_type != EntityType.PERSON:
+                    continue
+                _add_entity(graph, tag, EntityType.PERSON, rel_path)
 
 
 def _extract_prose_mentions(
