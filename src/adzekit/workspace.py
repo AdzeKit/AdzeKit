@@ -1,7 +1,4 @@
-"""Shed initialization and management.
-
-Creates the v1 directory tree, seeds template files, and validates shed health.
-"""
+"""Workspace initialization and conventional Markdown helpers."""
 
 from datetime import date
 from pathlib import Path
@@ -9,38 +6,30 @@ from pathlib import Path
 from adzekit.config import Settings, get_settings
 
 
-def init_shed(settings: Settings | None = None) -> Path:
-    """Create or verify the AdzeKit shed directory tree.
+def init_shed(
+    settings: Settings | None = None,
+    *,
+    seed_examples: bool = False,
+) -> Path:
+    """Initialize a workspace without inventing user content.
 
-    Writes the .adzekit marker file and seeds example files for every
-    backbone file type on first run.  Returns the shed root path.
+    ``seed_examples`` is retained for demos. Normal initialization creates
+    only empty conventions and their headings.
     """
     settings = settings or get_settings()
     settings.write_marker()
     settings.ensure_shed()
-    today = date.today()
-    iso = today.isoformat()
-
-    # Seed bench.md if empty
+    # Keep legacy convention files parseable while leaving them empty.
     if settings.bench_path.stat().st_size == 0:
         settings.bench_path.write_text(
-            f"""# Bench
-
-## Pending
-
-## Quick Capture
-- [{iso}] Example: remember to follow up with Alice about the API estimate
-""",
+            "# Bench\n\n## Pending\n",
             encoding="utf-8",
         )
 
     # Seed loops/active.md with an example loop if empty
     if settings.loops_active.stat().st_size == 0:
         settings.loops_active.write_text(
-            f"""# Active Loops
-
-- [ ] (S) [{iso}] Send Alice the API estimate
-""",
+            "# Active Loops\n",
             encoding="utf-8",
         )
 
@@ -53,24 +42,17 @@ def init_shed(settings: Settings | None = None) -> Path:
             encoding="utf-8",
         )
 
-    # Seed today's daily note
-    create_daily_note(today, settings)
-
-    # Seed one active project if projects/ has no .md files
-    if not any(f for f in settings.active_dir.iterdir() if f.is_file() and f.suffix == ".md"):
-        create_project("example-project", title="Example Project", backlog=False, settings=settings)
-
-    # Seed one weekly review if reviews/ is empty
-    if not any(settings.reviews_dir.iterdir()):
-        _seed_review(today, settings)
-
-    # Seed one knowledge note if knowledge/ is empty
-    if not any(settings.knowledge_dir.iterdir()):
-        _seed_knowledge_note(settings)
-
-    # Seed graph/index.md placeholder if graph/ is empty
-    if not any(settings.graph_dir.iterdir()):
-        _seed_graph_index(settings)
+    if seed_examples:
+        today = date.today()
+        create_daily_note(today, settings)
+        if not any(settings.active_dir.glob("*.md")):
+            create_project(
+                "example-project", title="Example Project", backlog=False, settings=settings
+            )
+        if not any(settings.reviews_dir.iterdir()):
+            _seed_review(today, settings)
+        if not any(settings.knowledge_dir.iterdir()):
+            _seed_knowledge_note(settings)
 
     return settings.shed
 
@@ -122,16 +104,6 @@ def create_review(
 def _seed_review(today: date, settings: Settings) -> None:
     """Create an example weekly review file (used by init)."""
     create_review(today, settings)
-
-
-def _seed_graph_index(settings: Settings) -> None:
-    """Create a placeholder graph/index.md before the first build."""
-    path = settings.graph_dir / "index.md"
-    path.write_text(
-        "# Knowledge Graph Index\n\n"
-        "Graph not yet built. Run: adzekit graph build\n",
-        encoding="utf-8",
-    )
 
 
 def _seed_knowledge_note(settings: Settings) -> None:

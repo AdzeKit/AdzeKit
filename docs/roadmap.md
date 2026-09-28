@@ -1,19 +1,33 @@
-# AdzeKit Roadmap
+# Roadmap
 
-| Phase | Deliverable | Status |
-|-------|-------------|--------|
-| 0: Backbone | Shed spec, manual daily notes | Done |
-| 1: Access Layer | Parser, preprocessor, shed init | Done |
-| 2: Feature Layer | Loop lifecycle, WIP limits, CLI | Done |
-| 3: Extensions | Inbox processor, knowledge reviewer, weekly review | Done |
-| 4: AI Layer | LLM client, tool registry, orchestrator | Done (deprecated in favor of Claude Code skills) |
-| 5: UI Layer | FastAPI local dashboard | Done |
-| 6: Gmail Integration | OAuth, inbox triage, draft replies | Done |
-| 7: Skills Migration | Move from agent to Claude Code slash commands | Done |
-| 8: Slack Integration | Merged digest + knowledge extraction + actions | Done |
-| 9: Automation Layer | Auto-commit hooks, /log quick capture, /daily-close | Done |
-| 10: Doc Streamline | Consolidate philosophy, slim README, update spec | Done |
-| 11: Knowledge Graph | Entity/relationship ontology, graph builder, CLI, graph-update skill | Done |
-| 12: Push Triggers | Cron/launchd for morning briefing and evening nudge | Next |
-| 13: Calendar Integration | Google Calendar read, deep work block detection | Planned |
-| 14: Stale Draft Expiry | Auto-surface and auto-purge drafts older than N days | Planned |
+## Now: make the small product coherent
+
+- Use `workspace`, `workflow`, and `proposal` in every new public interface.
+- Route CLI and MCP behavior through the transport-neutral `Workspace` API.
+- Keep initialization empty and make optional conventions opt-in.
+- Preserve version 2 workspaces without requiring a migration.
+- Reduce base dependencies and move integrations behind extras.
+
+## Next: finish the boundary
+
+- Split the 1,600-line CLI into a small core command group and extension groups.
+- Add `workspace_*` MCP tool names with temporary `shed_*` aliases.
+- Move Gmail, Calendar, Telegram, DOCX, launchd, graph, and Claude-specific code
+  into independently installable extension packages.
+- Define an optimistic-concurrency token before enabling proposal acceptance in
+  multi-user web applications.
+- Replace copied runtime skill documents with a single workflow contract plus
+  adapter-owned execution instructions.
+
+## Later: improve portability
+
+- Publish a JSON Schema for snapshots and proposals.
+- Add conformance fixtures for Python, MCP, and future TypeScript clients.
+- Support storage backends through an interface only after the filesystem API is
+  stable and measured.
+
+## Legacy features
+
+Daily rituals, project WIP limits, loops, knowledge graphs, cadence, Gmail,
+Calendar, Telegram, DOCX export, and the Claude adapter remain supported for
+existing users. They are extensions, not milestones that define the core.

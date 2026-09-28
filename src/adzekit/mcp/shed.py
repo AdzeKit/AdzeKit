@@ -36,7 +36,16 @@ import json
 from datetime import date
 from typing import Any
 
-from adzekit.config import Settings, get_settings
+from adzekit.config import Settings
+
+
+def _workspace(settings: Settings | None = None):
+    """Resolve legacy settings at the transport edge, then use the core API."""
+    from adzekit import Workspace
+    from adzekit.config import get_settings
+
+    resolved = settings or get_settings()
+    return Workspace(resolved.shed)
 
 
 # --- Pure tool functions (testable in isolation) ---------------------------
@@ -44,90 +53,54 @@ from adzekit.config import Settings, get_settings
 
 def tool_get_loops(settings: Settings | None = None) -> str:
     """List open loops. Returns JSON array of {title, size, start_date, due, status}."""
-    from adzekit.preprocessor import load_active_loops
-    settings = settings or get_settings()
-    loops = load_active_loops(settings)
-    return json.dumps(
-        [
-            {
-                "title": loop.title,
-                "size": loop.size or "",
-                "date": loop.date.isoformat() if loop.date else None,
-                "due": loop.due.isoformat() if loop.due else None,
-                "status": loop.status,
-                "who": loop.who,
-                "next_action": loop.next_action,
-                "project": loop.project,
-            }
-            for loop in loops
-        ],
-        indent=2,
-    )
+    return json.dumps(_workspace(settings).loops(), indent=2)
 
 
 def tool_get_today(settings: Settings | None = None) -> str:
     """Return today's daily note as markdown, or a stub message if none exists."""
-    from adzekit.preprocessor import load_daily_note
-    settings = settings or get_settings()
-    note = load_daily_note(settings=settings)
+    note = _workspace(settings).today()
     if note is None:
         return (
             f"No daily note exists for {date.today().isoformat()}. "
             "Run `/daily-start` (or `adzekit daily-start`) to create one."
         )
-    return note.raw_content
+    return note["markdown"]
 
 
 def tool_get_projects(state: str = "active", settings: Settings | None = None) -> str:
     """List projects. Returns JSON array of {slug, title, state}."""
-    from adzekit.models import ProjectState
-    from adzekit.preprocessor import load_projects
-    settings = settings or get_settings()
     try:
-        project_state = ProjectState(state)
-    except ValueError:
+        projects = _workspace(settings).projects(state)
+    except ValueError as exc:
         return json.dumps({
-            "error": f"unknown project state '{state}'; valid: active, backlog, archive",
+            "error": str(exc),
         })
-    projects = load_projects(state=project_state, settings=settings)
     return json.dumps(
-        [
-            {"slug": p.slug, "title": p.title, "state": p.state.value}
-            for p in projects
-        ],
+        [{key: item[key] for key in ("slug", "title", "state")} for item in projects],
         indent=2,
     )
 
 
 def tool_get_knowledge(slug: str, settings: Settings | None = None) -> str:
     """Return a knowledge note's body by slug, or a not-found message."""
-    settings = settings or get_settings()
-    path = settings.knowledge_dir / f"{slug}.md"
-    if not path.exists():
+    try:
+        note = _workspace(settings).knowledge(slug)
+    except ValueError as exc:
+        return f"Invalid knowledge note: {exc}"
+    if note is None:
         return f"No knowledge note: {slug}"
-    return path.read_text(encoding="utf-8")
+    return note["markdown"]
 
 
 def tool_list_inbox(settings: Settings | None = None) -> str:
     """List pending draft proposals. Returns JSON array of entry summaries."""
-    from adzekit.modules.drafts import InboxConflictError, parse_inbox
-    settings = settings or get_settings()
+    from adzekit.modules.drafts import InboxConflictError
     try:
-        entries = parse_inbox(settings)
+        entries = _workspace(settings).inbox()
     except InboxConflictError as exc:
         return json.dumps({"error": str(exc)})
     return json.dumps(
-        [
-            {
-                "index": e.index,
-                "date": e.date,
-                "time": e.time,
-                "skill": e.skill,
-                "summary": e.summary,
-                "path": e.path,
-            }
-            for e in entries
-        ],
+        entries,
         indent=2,
     )
 
@@ -135,7 +108,7 @@ def tool_list_inbox(settings: Settings | None = None) -> str:
 def tool_show_draft(index: int, settings: Settings | None = None) -> str:
     """Return draft #index's body + provenance as JSON."""
     from adzekit.modules.drafts import InboxEntryNotFoundError, show_draft
-    settings = settings or get_settings()
+    settings = _workspace(settings).settings
     try:
         result = show_draft(index, settings=settings)
     except (InboxEntryNotFoundError, FileNotFoundError) as exc:
@@ -156,30 +129,16 @@ def tool_propose_draft(
     reviews via `adzekit drafts list` / `adzekit drafts show N` and promotes
     with `adzekit drafts accept N`.
     """
-    from adzekit.preprocessor import write_draft_with_frontmatter
-    settings = settings or get_settings()
-    path = write_draft_with_frontmatter(
-        skill,
-        body,
-        settings=settings,
+    result = _workspace(settings).propose(
+        workflow=skill,
+        markdown=body,
         summary=summary,
         confidence=confidence,
-        trigger="mcp",
+        source="mcp",
     )
-    try:
-        rel = str(path.resolve().relative_to(settings.shed.resolve()))
-    except ValueError:
-        rel = str(path)
-    # Defensive: assert the write landed inside drafts/.
-    if "drafts/" not in rel and not rel.startswith("drafts"):
-        return json.dumps({
-            "error": (
-                f"BUG: propose_draft wrote outside drafts/: {rel}. "
-                "This violates the AdzeKit invariant; please file an issue."
-            ),
-            "path": rel,
-        })
-    return json.dumps({"path": rel, "skill": skill, "summary": summary}, indent=2)
+    return json.dumps(
+        {"path": result["path"], "skill": skill, "summary": summary}, indent=2
+    )
 
 
 # --- MCP server wiring -----------------------------------------------------
@@ -198,7 +157,9 @@ _TOOL_DESCRIPTORS: list[dict[str, Any]] = [
     },
     {
         "name": "shed_get_projects",
-        "description": "List projects. Pass `state` = active | backlog | archive (default: active).",
+        "description": (
+            "List projects. Pass `state` = active | backlog | archive (default: active)."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -219,12 +180,17 @@ _TOOL_DESCRIPTORS: list[dict[str, Any]] = [
     },
     {
         "name": "shed_list_inbox",
-        "description": "List pending draft proposals in drafts/INBOX (one entry per pending draft).",
+        "description": (
+            "List pending draft proposals in drafts/INBOX (one entry per pending draft)."
+        ),
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
         "name": "shed_show_draft",
-        "description": "Show body + provenance for INBOX entry #index. Use the index from shed_list_inbox.",
+        "description": (
+            "Show body + provenance for INBOX entry #index. "
+            "Use the index from shed_list_inbox."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {"index": {"type": "integer", "minimum": 1}},
@@ -242,9 +208,15 @@ _TOOL_DESCRIPTORS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "skill": {"type": "string", "description": "Skill name; will appear in INBOX and provenance."},
+                "skill": {
+                    "type": "string",
+                    "description": "Skill name; will appear in INBOX and provenance.",
+                },
                 "body": {"type": "string", "description": "Full markdown body of the draft."},
-                "summary": {"type": "string", "description": "Short one-line summary (shown in INBOX)."},
+                "summary": {
+                    "type": "string",
+                    "description": "Short one-line summary (shown in INBOX).",
+                },
                 "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
             },
             "required": ["skill", "body"],

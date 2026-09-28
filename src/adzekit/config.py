@@ -59,15 +59,19 @@ class ShedNotInitializedError(RuntimeError):
     def __init__(self, path: Path) -> None:
         self.path = path
         super().__init__(
-            f"{path} is not an AdzeKit shed.\n"
+            f"{path} is not an initialized AdzeKit workspace.\n"
             f"\n"
-            f"  To create a new shed here:\n"
+            f"  To create a workspace here:\n"
             f"    adzekit init {path}\n"
             f"\n"
-            f"  To point at an existing shed:\n"
-            f"    adzekit --shed /path/to/shed <command>\n"
-            f"    export ADZEKIT_SHED=/path/to/shed"
+            f"  To use an existing workspace:\n"
+            f"    adzekit --workspace /path/to/workspace <command>\n"
+            f"    export ADZEKIT_WORKSPACE=/path/to/workspace"
         )
+
+
+# Compatibility name for callers that imported the original exception.
+WorkspaceNotInitializedError = ShedNotInitializedError
 
 
 class Settings(BaseSettings):
@@ -101,19 +105,6 @@ class Settings(BaseSettings):
         ),
     )
 
-    agent_backend: str = Field(
-        default="isaac",
-        description="Agent backend for the web UI chat (isaac via dbexec).",
-    )
-
-    agent_timeout: int = Field(
-        default=600,
-        description=(
-            "Seconds to wait for an Isaac response before timing out. "
-            "Set via ADZEKIT_AGENT_TIMEOUT or agent_timeout in .adzekit."
-        ),
-    )
-
     @model_validator(mode="after")
     def _load_shed_config(self) -> "Settings":
         """Load connection settings from the shed's .adzekit config file.
@@ -132,8 +123,6 @@ class Settings(BaseSettings):
             "rclone_remote": "ADZEKIT_RCLONE_REMOTE",
             "git_repo": "ADZEKIT_GIT_REPO",
             "git_branch": "ADZEKIT_GIT_BRANCH",
-            "agent_backend": "ADZEKIT_AGENT_BACKEND",
-            "agent_timeout": "ADZEKIT_AGENT_TIMEOUT",
         }
         for field_name, env_key in field_map.items():
             if env_key in os.environ:
@@ -153,6 +142,11 @@ class Settings(BaseSettings):
         return self
 
     # --- Derived shed paths (v1 backbone) ---
+
+    @property
+    def workspace(self) -> Path:
+        """Preferred public name for the workspace root."""
+        return self.shed
 
     @property
     def loops_dir(self) -> Path:
@@ -517,17 +511,23 @@ class Settings(BaseSettings):
         self.push_drafts()
 
 
+def set_global_workspace(workspace_path: Path) -> None:
+    """Persist the default workspace path for CLI compatibility."""
+    GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    data = _parse_kv_file(GLOBAL_CONFIG_PATH) if GLOBAL_CONFIG_PATH.exists() else {}
+    data.pop("shed", None)
+    data["workspace"] = str(workspace_path)
+    lines = [f"{k} = {v}" for k, v in data.items()]
+    GLOBAL_CONFIG_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def set_global_shed(shed_path: Path) -> None:
     """Write the shed path to the global config file (~/.config/adzekit/config).
 
     Called by `adzekit set-shed`. Persists across sessions and terminal resets.
     All AdzeKit tools pick this up via get_settings().
     """
-    GLOBAL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    data = _parse_kv_file(GLOBAL_CONFIG_PATH) if GLOBAL_CONFIG_PATH.exists() else {}
-    data["shed"] = str(shed_path)
-    lines = [f"{k} = {v}" for k, v in data.items()]
-    GLOBAL_CONFIG_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    set_global_workspace(shed_path)
 
 
 def get_settings() -> Settings:
@@ -538,11 +538,17 @@ def get_settings() -> Settings:
       2. ~/.config/adzekit/config  (written by `adzekit set-shed`)
       3. Default ~/adzekit
     """
+    workspace_env = os.environ.get("ADZEKIT_WORKSPACE")
+    if workspace_env and "ADZEKIT_SHED" not in os.environ:
+        settings = Settings(shed=Path(workspace_env).expanduser())
+        _check_backbone_version(settings)
+        return settings
     if "ADZEKIT_SHED" not in os.environ:
         if GLOBAL_CONFIG_PATH.exists():
             data = _parse_kv_file(GLOBAL_CONFIG_PATH)
-            if "shed" in data:
-                settings = Settings(shed=Path(data["shed"]).expanduser())
+            configured = data.get("workspace") or data.get("shed")
+            if configured:
+                settings = Settings(shed=Path(configured).expanduser())
                 _check_backbone_version(settings)
                 return settings
     settings = Settings()

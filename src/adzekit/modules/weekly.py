@@ -15,8 +15,11 @@ from datetime import date, timedelta
 from adzekit.config import Settings, get_settings
 from adzekit.models import DailyNote, Loop
 from adzekit.modules.bench import cull
-from adzekit.modules.daily import DAILY_ARCHIVE_DAYS, archive_old_dailies
-from adzekit.modules.daily import _filter_overdue  # noqa: PLC2701 — shared ritual logic
+from adzekit.modules.daily import (  # noqa: PLC2701 — shared ritual logic
+    DAILY_ARCHIVE_DAYS,
+    _filter_overdue,
+    archive_old_dailies,
+)
 from adzekit.modules.insights import (
     extract_carry_forwards,
     iso_week_window,
@@ -211,7 +214,7 @@ def run_weekly_review(
     days = archive_days if archive_days is not None else DAILY_ARCHIVE_DAYS
 
     bench_added, bench_cleared = cull(settings)
-    archived = archive_old_dailies(settings, days=days)
+    archived = archive_old_dailies(settings, days=days, today=target)
     pulse = extract_pulse(settings, target=target)
 
     year, week_num, _ = target.isocalendar()

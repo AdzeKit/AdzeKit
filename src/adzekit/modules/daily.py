@@ -41,6 +41,7 @@ def _atomic_write(path: Path, content: str) -> None:
 def archive_old_dailies(
     settings: Settings | None = None,
     days: int | None = None,
+    today: date | None = None,
 ) -> list[str]:
     """Move daily notes older than N days into daily/archive/.
 
@@ -56,7 +57,7 @@ def archive_old_dailies(
     archive = settings.daily_archive_dir
     archive.mkdir(parents=True, exist_ok=True)
 
-    today = date.today()
+    today = today or date.today()
     cutoff = today - timedelta(days=threshold)
     moved: list[str] = []
 

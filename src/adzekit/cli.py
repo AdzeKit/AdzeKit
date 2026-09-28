@@ -1,15 +1,13 @@
-"""AdzeKit CLI -- command-line interface for operating on any backbone-conforming shed.
+"""Command-line interface for an AdzeKit workspace.
 
 Usage:
-    adzekit init [path]                    Initialize a new shed at path (default: cwd)
-    adzekit use-workspace <url>            Clone/update a git workspace and set it as shed
+    adzekit init [path]                    Initialize a workspace (default: cwd)
+    adzekit use-workspace <url>            Clone/update and select a git workspace
     adzekit today                          Open or create today's daily note
     adzekit add-loop                       Add a loop to open.md
-    adzekit status                         Show shed health summary
-    adzekit sync [pull|push]               Sync shed via git and rclone (stock/ + drafts/)
+    adzekit status                         Show workspace health
+    adzekit sync [pull|push]               Sync files and proposals
     adzekit setup-sync                     Configure rclone for Google Drive sync
-    adzekit serve                          Start the local web UI
-    adzekit agent <message>                Run the agent with a one-shot message
 """
 
 import argparse
@@ -70,7 +68,7 @@ def cmd_adze(args: argparse.Namespace) -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Initialize a new AdzeKit shed with the full backbone structure."""
+    """Initialize an empty AdzeKit workspace."""
     from adzekit.config import Settings
     from adzekit.workspace import init_shed
 
@@ -79,7 +77,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     root = init_shed(settings)
 
     # Print the tree that was created
-    print(f"Initialized AdzeKit shed at {root}\n")
+    print(f"Initialized AdzeKit workspace at {root}\n")
     _print_tree(root, root)
 
 
@@ -944,7 +942,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     wip = wip_status(settings)
     loops = loop_stats(settings)
 
-    print(f"Shed: {settings.shed}")
+    print(f"Workspace: {settings.workspace}")
     print(f"Active projects: {wip['active_projects']}/{wip['max_active_projects']}")
     print(f"Daily tasks: {wip['daily_tasks']}/{wip['max_daily_tasks']}")
     print(f"Active loops: {loops['active']}")
@@ -1072,10 +1070,10 @@ def cmd_set_shed(args: argparse.Namespace) -> None:
         print("  Run `adzekit init` inside that directory to initialize it.")
 
     set_global_shed(shed_path)
-    print(f"Shed configured: {shed_path}")
+    print(f"Workspace configured: {shed_path}")
     print(f"Config saved:    {GLOBAL_CONFIG_PATH}")
     print()
-    print("All AdzeKit tools will now use this shed automatically.")
+    print("CLI commands will use this workspace by default.")
     print("No need to set ADZEKIT_SHED in your environment.")
 
 
@@ -1106,7 +1104,7 @@ def cmd_use_workspace(args: argparse.Namespace) -> None:
         subprocess.run(["git", "clone", git_url, str(local_path)], check=True)
 
     set_global_shed(local_path)
-    print(f"Shed set to: {local_path}")
+    print(f"Workspace set to: {local_path}")
 
     settings = Settings(shed=local_path)
     if settings.is_initialized:
@@ -1118,8 +1116,8 @@ def cmd_use_workspace(args: argparse.Namespace) -> None:
             settings.set_config("rclone_remote", rclone_remote)
             print(f"Recorded rclone_remote = {rclone_remote}")
     else:
-        print(f"\nNote: {local_path} is not yet an AdzeKit shed.")
-        print(f"  Run: adzekit --shed {local_path} init")
+        print(f"\nNote: {local_path} is not yet an AdzeKit workspace.")
+        print(f"  Run: adzekit --workspace {local_path} init")
 
     print("\nDone. Run 'adzekit sync' to pull latest.")
 
@@ -1232,8 +1230,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="AdzeKit -- prehistoric tools, modern brains.",
     )
     parser.add_argument(
+        "--workspace",
         "--shed",
-        help="Path to the shed (overrides ADZEKIT_SHED).",
+        dest="shed",
+        help="Workspace path (overrides ADZEKIT_WORKSPACE and ADZEKIT_SHED).",
         default=None,
     )
 
@@ -1244,7 +1244,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_adze.set_defaults(func=cmd_adze)
 
     # init
-    p_init = sub.add_parser("init", help="Initialize a new shed.")
+    p_init = sub.add_parser("init", help="Initialize an empty workspace.")
     p_init.add_argument(
         "path",
         nargs="?",
@@ -1347,7 +1347,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_promote.set_defaults(func=cmd_promote)
 
     # status
-    p_status = sub.add_parser("status", help="Show shed health summary.")
+    p_status = sub.add_parser("status", help="Show workspace health.")
     p_status.set_defaults(func=cmd_status)
 
     # export
@@ -1412,12 +1412,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # set-shed
     p_set_shed = sub.add_parser(
-        "set-shed",
-        help="Set the global shed path (persists across sessions and terminal resets).",
+        "set-workspace",
+        aliases=["set-shed"],
+        help="Set the default workspace path.",
     )
     p_set_shed.add_argument(
         "path",
-        help="Path to the AdzeKit shed (e.g. ~/Repos/adzekit-workspace).",
+        help="Path to the AdzeKit workspace.",
     )
     p_set_shed.set_defaults(func=cmd_set_shed)
 

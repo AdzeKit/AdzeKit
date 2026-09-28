@@ -172,7 +172,7 @@ def test_require_initialized_raises(tmp_path):
     from adzekit.config import Settings, ShedNotInitializedError
 
     s = Settings(shed=tmp_path)
-    with pytest.raises(ShedNotInitializedError, match="not an AdzeKit shed"):
+    with pytest.raises(ShedNotInitializedError, match="not an initialized AdzeKit workspace"):
         s.require_initialized()
 
 

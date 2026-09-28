@@ -1,3 +1,6 @@
-"""AdzeKit -- a markdown-native, personal productivity workbench."""
+"""AdzeKit's transport-neutral workspace API."""
 
-__version__ = "0.3.0"
+from adzekit.core import Workspace
+
+__all__ = ["Workspace"]
+__version__ = "0.4.0"

@@ -229,7 +229,9 @@ class TestDailyClose:
         main(["init", str(tmp_path / "shed")])
         main(["--shed", str(tmp_path / "shed"), "daily-close"])
         output = capsys.readouterr().out
-        assert "Daily Close" in output or "already has" in output
+        # Initialization is intentionally empty; closing before daily-start is
+        # a clear no-op rather than operating on manufactured example content.
+        assert "No daily note" in output
 
 
 class TestArchiveOldDailies:

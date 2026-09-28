@@ -13,6 +13,10 @@ from adzekit.modules.tags import (
 from adzekit.workspace import create_project, init_shed
 
 
+def _init_example(workspace):
+    init_shed(workspace, seed_examples=True)
+
+
 def test_extract_tags_basic():
     text = "Some text #hello and #world here"
     assert extract_tags(text) == {"hello", "world"}
@@ -49,7 +53,7 @@ def test_extract_tags_empty():
 
 
 def test_tag_index_from_vault(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     idx = tag_index(workspace)
     # The seeded knowledge note has #example
     assert "example" in idx
@@ -57,7 +61,7 @@ def test_tag_index_from_vault(workspace):
 
 
 def test_tag_index_excludes_stock(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     stock_file = workspace.stock_dir / "test-proj" / "notes.md"
     stock_file.parent.mkdir(parents=True, exist_ok=True)
     stock_file.write_text("#secret-tag in stock", encoding="utf-8")
@@ -67,32 +71,32 @@ def test_tag_index_excludes_stock(workspace):
 
 
 def test_files_for_tag(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     files = files_for_tag("example", workspace)
     assert len(files) >= 1
     assert any("example-note" in f.name for f in files)
 
 
 def test_files_for_tag_with_hash_prefix(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     files = files_for_tag("#example", workspace)
     assert len(files) >= 1
 
 
 def test_files_for_tag_missing(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     assert files_for_tag("nonexistent", workspace) == []
 
 
 def test_tags_for_file(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     note = workspace.knowledge_dir / "example-note.md"
     tags = tags_for_file(note)
     assert "example" in tags
 
 
 def test_all_tags(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     tags = all_tags(workspace)
     assert isinstance(tags, list)
     assert tags == sorted(tags)
@@ -100,7 +104,7 @@ def test_all_tags(workspace):
 
 
 def test_generate_cursor_snippets(workspace):
-    init_shed(workspace)
+    _init_example(workspace)
     path = generate_cursor_snippets(workspace)
     assert path.exists()
     assert path.name == "adzekit.code-snippets"
