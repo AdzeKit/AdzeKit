@@ -1,143 +1,115 @@
 # AdzeKit
 
-AdzeKit is a portable Markdown workspace for people and agents.
+Markdown habits for people and their agents.
 
-Your context stays in ordinary files. Software reads those files and puts
-suggested changes in a proposal inbox. You decide what becomes permanent.
+AdzeKit keeps your days, commitments, projects, and notes in plain Markdown
+that you, every AI agent, and your phone can all read and edit. The CLI
+handles the mechanical parts. It has no dependencies, makes no AI calls, and
+never touches the network (except `git` when you run `sync`).
 
-```text
-files -> workflow -> proposal -> human decision
-```
+Read [PHILOSOPHY.md](PHILOSOPHY.md) for the reasoning. In short: five habits
+(write the day down, close every loop, cap work in progress, review weekly,
+keep what lasts) and three rules (plain files are the truth, one set of
+instructions for every agent, agents edit and git remembers).
 
-That is the product. It does not require an LLM, a particular agent, a web
-framework, or a database.
-
-## Start
+## Install
 
 ```bash
-git clone https://github.com/AdzeKit/AdzeKit.git
-cd AdzeKit
-uv pip install -e .
-
-adzekit init ~/my-workspace
-adzekit --workspace ~/my-workspace status
+uv tool install git+https://github.com/AdzeKit/AdzeKit   # or: pipx install ...
+adzekit init ~/notes
 ```
 
-Initialization creates an empty workspace. It does not invent example projects,
-notes, reviews, or graph data.
+## The workspace
 
-For compatibility, `--shed` and `ADZEKIT_SHED` still work. New integrations
-should use `--workspace`, `ADZEKIT_WORKSPACE`, or an explicit Python path.
+```text
+notes/
+├── AGENTS.md            instructions every agent reads
+├── CLAUDE.md, GEMINI.md one-line imports of AGENTS.md
+├── .adzekit             limits: max_active_projects, max_daily_tasks, ...
+├── daily/2026-09-28.md  ## Intention (≤5) · ## Log · ## Reflection
+├── loops/active.md      - [ ] (S) [2026-09-28] What I owe, to whom (2026-10-01)
+├── loops/archive.md     closed loops, grouped by sweep date
+├── projects/*.md        active projects; backlog/ and archive/ for the rest
+├── knowledge/*.md       durable notes, [[linked]] and #tagged
+├── reviews/2026-W40.md  weekly reviews
+└── skills/*.md          routines any agent can follow
+```
 
-## Python API
+Every file is ordinary Markdown with no required frontmatter. The folder says
+what state a project is in, and dates are written inline.
+
+## A day
+
+```bash
+adzekit today                       # create today's note, carrying unfinished intentions
+adzekit log "Demoed MCP to CN"      # append to today's Log
+adzekit loop add "Send Ana the estimate" --size S --due 2026-10-01
+adzekit loop                        # numbered list with age and due flags
+adzekit loop close 3                # by number or unique text
+adzekit loop sweep                  # move ticked loops to the archive
+adzekit status                      # one-screen health check
+adzekit review                      # scaffold this week's review
+adzekit project new acme-poc        # refuses past the active cap (--force to override)
+adzekit project move acme-poc archive
+adzekit sync                        # git commit, pull --rebase, push
+```
+
+The workspace is found from `--workspace`, then `$ADZEKIT_WORKSPACE`, then the
+folder you're standing in, then `~/.config/adzekit/config`.
+
+## Across agents
+
+`AGENTS.md` is the single source of instructions. Codex, Cursor, and other
+tools that follow the AGENTS.md convention read it directly. Claude Code and
+Gemini CLI read their own file, which `init` writes as a one-line
+`@AGENTS.md` import. Put runtime-specific notes below that line.
+
+Routines live in `skills/` as numbered Markdown steps, such as
+`daily-start`, `daily-close`, `weekly-review`, and `capture`. Tell any agent
+"run daily start" and it reads `skills/daily-start.md`. Add your own the same
+way. Integrations like email, chat, and calendar belong to your agent's tools,
+not to AdzeKit.
+
+## Across devices
+
+The workspace is a git repository. `adzekit sync` on a laptop, plus a
+git-capable Markdown app on a phone (for example Obsidian with the Obsidian
+Git plugin, or Working Copy on iOS), keeps them in step. Obsidian understands
+`[[wikilinks]]`, `#tags`, and checkboxes natively, so the phone needs no
+AdzeKit code at all. Raw material such as transcripts and PDFs goes under
+`stock/`, which stays out of git.
+
+## Python
 
 ```python
-from adzekit import Workspace
+from datetime import date
+from adzekit import Workspace, loops
 
-workspace = Workspace("/data/my-workspace")
-
-# JSON-safe: return this directly from a web route or tool handler.
-state = workspace.snapshot()
-
-# Generated work always enters the review queue.
-proposal = workspace.propose(
-    workflow="weekly-review",
-    markdown="# Proposed review\n",
-    summary="Weekly review ready",
-    source="my-agent",
-)
+ws = Workspace.find()               # or Workspace("/path/to/notes")
+for loop in loops.open_loops(ws):
+    print(loop.title, loop.age(date.today()))
 ```
 
-`Workspace` uses the path you give it. It does not consult global configuration,
-which makes it suitable for FastAPI, Flask, Django, serverless functions, MCP
-servers, background jobs, and tests. See [the agent contract](docs/agent-contract.md).
+## Coming from 0.x
 
-## Workspace format
+`adzekit init <existing-workspace>` adds `AGENTS.md`, starter skills, and any
+missing folders. It never overwrites a file. Then move what's in your
+`CLAUDE.md` into the `## About me` section of `AGENTS.md`, and make
+`CLAUDE.md` just `@AGENTS.md`.
 
-The required format is intentionally small:
+| 0.x | 1.0 |
+|---|---|
+| `daily-start`, `daily-close` | `today`, plus `skills/daily-*.md` |
+| `add-loop`, `sweep` | `loop add`, `loop sweep` |
+| `weekly-review` | `review`, plus `skills/weekly-review.md` |
+| `graph`, `drafts`, `gateway`, `mcp`, `insight`, `distill`, `export`, launchd cadence | removed; see the `legacy-v0` tag |
 
-```text
-my-workspace/
-├── .adzekit       format marker
-└── drafts/        generated proposals waiting for review
-```
-
-Bundled workflows also understand optional folders for daily notes, loops,
-projects, knowledge, reviews, and a derived graph. They are conventions, not the
-definition of AdzeKit. See [the workspace format](backbone-spec/schema.md).
-
-## CLI essentials
-
-```bash
-adzekit today                       # create/show today's note
-adzekit add-loop "Send estimate"    # record a commitment
-adzekit project new-client          # create a project in backlog
-adzekit status                      # summarize the workspace
-
-adzekit drafts list                 # list proposals
-adzekit drafts show 1               # inspect proposal and provenance
-adzekit drafts accept 1             # promote it to human-owned files
-adzekit drafts dismiss 2            # archive it
-adzekit drafts rollback             # undo the latest acceptance
-```
-
-The CLI contains additional workflow and integration commands. They are kept for
-existing users but are not part of the minimal product model.
-
-## Agents
-
-Any agent can use AdzeKit if it can:
-
-1. open an explicit workspace;
-2. read Markdown or `Workspace.snapshot()`;
-3. submit generated work through `Workspace.propose()`;
-4. leave acceptance or dismissal to the person.
-
-MCP support is optional:
-
-```bash
-uv pip install -e ".[mcp]"
-adzekit-mcp
-```
-
-The Claude Code adapter remains available under `adapters/claude-code/`, but it
-is one integration rather than AdzeKit's runtime.
-
-## Extensions
-
-Install only what an application needs:
-
-```bash
-uv pip install -e ".[mcp]"       # MCP transport
-uv pip install -e ".[export]"    # DOCX export
-uv pip install -e ".[telegram]"  # Telegram gateway
-uv pip install -e ".[sdk]"       # legacy Claude SDK runner
-uv pip install -e ".[dev,all]"   # contributor environment
-```
-
-Gmail, Calendar, Telegram, document export, launchd cadence, graph building, and
-runtime adapters are extensions. The core remains useful without them.
-
-## Design
-
-AdzeKit follows three principles:
-
-1. Keep the source ordinary.
-2. Separate proposals from decisions.
-3. Keep the core smaller than its integrations.
-
-Read the short [philosophy](docs/philosophy.md) and the detailed
-[simplification review](docs/simplification-review.md).
+Existing `.adzekit` settings, `ADZEKIT_SHED`, `--shed`, and the `shed =` global
+config keep working.
 
 ## Development
 
 ```bash
-uv pip install -e ".[dev,all]"
-pytest -q
-ruff check src tests
+uv pip install -e ".[dev]"
+pytest -q && ruff check src tests
 ```
-
-The storage format remains at version 2, so existing workspaces need no
-migration. Legacy vocabulary such as “shed,” “backbone,” and “workbench” remains
-in compatibility APIs while new public interfaces use “workspace,” “files,” and
-“proposals.”

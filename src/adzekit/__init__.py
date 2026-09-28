@@ -1,6 +1,6 @@
-"""AdzeKit's transport-neutral workspace API."""
+"""AdzeKit: Markdown habits for people and their agents."""
 
-from adzekit.core import Workspace
+from adzekit.workspace import Workspace, WorkspaceError
 
-__all__ = ["Workspace"]
-__version__ = "0.4.0"
+__all__ = ["Workspace", "WorkspaceError"]
+__version__ = "1.0.0"

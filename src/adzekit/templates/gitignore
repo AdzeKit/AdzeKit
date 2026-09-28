@@ -1,0 +1,8 @@
+# Raw material (transcripts, PDFs, exports) stays local; notes about it go in projects/.
+stock/
+
+# Editor and OS noise
+.DS_Store
+.obsidian/workspace*.json
+.obsidian/cache
+*.tmp
