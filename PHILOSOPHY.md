@@ -1,67 +1,86 @@
 # Philosophy
 
-The adze is older than writing. It shapes wood by taking away what doesn't
-belong.
+The adze shapes wood by taking away what doesn't belong. So does this.
 
-Your mind works under fixed limits. Working memory holds about four things.
-Every unfinished commitment keeps nagging in the background (the Zeigarnik
-effect). Every context switch costs minutes of refocusing. Meanwhile, agents
-now read and write far faster than you can follow. Adding more software doesn't
-close that gap. A few habits kept in files, which both you and every tool can
-read, does.
+Your mind runs on fixed limits: working memory holds a few things, every open
+commitment nags until it's closed, every context switch costs minutes. Agents
+have the opposite problem — they read and write faster than you can follow. Put
+those together and the risk is obvious: the agent does more and more, and you
+understand less and less of it.
 
-**Markdown is the interface between you and every tool.**
+A shed closes that gap. It's a folder of Markdown that a person and their
+agents both read and write. Nothing the agent does is hidden in a chat log or a
+vector store; it lands in a file you can open, diff, and correct.
 
-## Five habits
+## The model
 
-These five habits are the whole method. They work on paper, and AdzeKit only
-makes them cheaper to keep.
+A shed holds two things and is worked by two others.
 
-1. **Write the day down.** Each day's note has at most five intentions, a
-   log of what happened, and a short reflection. If you write it down, you
-   don't have to carry it in your head.
-2. **Close every loop.** Every commitment you make to someone becomes one line
-   in `loops/active.md`, and stays there until it's done, rescheduled, or
-   dropped on purpose. An open loop you can see nags less than one you're
-   trying to remember.
-3. **Cap work in progress.** Only a few projects can be active at once. New
-   work has to push something else out, as a deliberate trade-off.
-4. **Review, don't accumulate.** Once a week, every stale loop and every quiet
-   project gets a decision. Things left undecided pile up into guilt and
-   clutter.
-5. **Keep what lasts.** Durable ideas go in knowledge notes, linked with
-   `[[wikilinks]]`, so they survive the project that produced them.
+**Records — your state.** Daily notes, open loops, projects, knowledge,
+reviews. Plain Markdown, no database, no required metadata. This is the half
+that makes agent work *legible*: everything is a file you can read and a diff
+you can trust.
+
+**Skills — your repeatable work.** A skill is compiled judgment: how you want a
+recurring job done, written once as plain steps, so any agent can replay it
+against your records. Triaging the inbox, scoring a request, sweeping loops for
+lost momentum. This is the half that gives you *leverage* — you describe the
+procedure once instead of re-explaining it every time.
+
+Records without skills is just a notebook. Skills without records is an agent
+with nowhere to stand. The shed is both.
+
+**The agent does the work.** It reads your records, follows your skills, and
+edits the files. Reasoning, tool use, and integrations (email, chat, calendar)
+belong to whatever agent you use — not to the shed. The shed is what the agent
+stands on, not the agent.
+
+**The CLI and git keep it honest.** A tiny, dependency-free CLI does the parts
+that must be exact — dates, carry-forward, sweeping, the WIP cap, sync. Git is
+the memory: the diff is the review, `revert` is the undo, `sync` carries
+everything to your phone and your other machines.
+
+## The habits the records assume
+
+The record formats aren't arbitrary. Each encodes a habit worth keeping:
+
+- **Write the day down** — a daily note with at most five intentions. What's on
+  the page isn't in your head.
+- **Close every loop** — each commitment is one line in `loops/active.md` until
+  it's done, rescheduled, or dropped on purpose.
+- **Cap work in progress** — only a few projects are active; new work pushes
+  something out, as a deliberate trade-off.
+- **Review, don't accumulate** — weekly, every stale loop and quiet project gets
+  a decision, so nothing rots into guilt.
+- **Keep what lasts** — durable ideas become `[[linked]]` knowledge notes that
+  outlive the project that produced them.
+
+They work on paper. The shed just makes them cheap, and lets an agent keep them
+with you.
 
 ## Three rules for tools
 
-1. **Plain files are the source of truth.** No database, no hidden agent
-   memory, no required metadata. If AdzeKit disappeared tomorrow, the
-   workspace would work just as well in any editor.
-2. **One set of instructions for every agent.** `AGENTS.md` describes the
-   workspace once. Runtime-specific files only import it. Routines are
-   Markdown steps in `skills/`, not code tied to one runtime.
+1. **Plain files are the source of truth.** No database, no hidden memory, no
+   mandatory schema. If AdzeKit vanished, the shed would still work in any
+   editor.
+2. **One set of instructions for every agent.** `AGENTS.md` describes the shed
+   once; runtime files (`CLAUDE.md`, `GEMINI.md`) only import it. Skills are
+   Markdown steps, not code bound to one runtime.
 3. **Agents edit, git remembers.** Changes go straight into the files, kept
-   small and in the usual formats. The diff is the review, `git revert` is the
-   undo, and `adzekit sync` carries everything to your other devices.
+   small and in the usual formats. The diff is the review; git is the undo.
 
 ## What AdzeKit is not
 
 It is not an agent runtime, an integration hub, a scheduler, or a knowledge
-graph. Earlier versions tried all of these (see the `legacy-v0` tag). Each one
-cost more attention to maintain than it saved. Integrations belong to
-whichever agent you use. AdzeKit only owns the formats those agents read and
-write.
+graph. Earlier versions were all four (see the `legacy-v0` tag); each cost more
+attention to maintain than it saved. Integrations belong to your agent. The
+shed owns only the formats — records and skills — that agents read and write.
 
-## Test for new features
+## Test for anything new
 
-Before adding anything, ask:
-
-1. **Does it still work if I edit the files by hand?** If not, it's too
-   clever.
-2. **Does it reduce what I have to hold in my head?** If not, it's clutter.
-3. **Could it be a skill (Markdown steps) instead of code?** If so, write
-   the skill.
-
-Code is only for what should be exact and repeatable: dates, carry-forward,
-sweeping, limits, and sync. Everything that needs judgment belongs in a
-skill, where any agent (or you) can follow it.
+1. **Does it still work if I edit the files by hand?** If not, it's too clever.
+2. **Does it reduce what I hold in my head?** If not, it's clutter.
+3. **Is it a recurring procedure?** Then it's a skill (Markdown steps), not a
+   feature. Code is only for what must be exact and repeatable — dates,
+   sweeping, caps, sync. Everything that needs judgment is a skill, where you or
+   any agent can read and change it.
