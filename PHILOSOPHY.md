@@ -35,10 +35,13 @@ edits the files. Reasoning, tool use, and integrations (email, chat, calendar)
 belong to whatever agent you use — not to the shed. The shed is what the agent
 stands on, not the agent.
 
-**The CLI and git keep it honest.** A tiny, dependency-free CLI does the parts
-that must be exact — dates, carry-forward, sweeping, the WIP cap, sync. Git is
-the memory: the diff is the review, `revert` is the undo, `sync` carries
-everything to your phone and your other machines.
+**The CLI and git keep it honest.** Five commands do the parts that must be
+exact: create today's note and carry forward, sweep ticked loops, report health
+against your limits, scaffold the weekly review, and sync. Git is the memory:
+the diff is the review, `revert` is the undo, and sync carries everything to
+your phone, your other machines, and cloud agents. Sync is where the code earns
+its keep. It merges concurrent edits to records instead of stopping, and it
+never leaves the repository half-merged.
 
 ## The habits the records assume
 
@@ -64,8 +67,9 @@ with you.
    mandatory schema. If AdzeKit vanished, the shed would still work in any
    editor.
 2. **One set of instructions for every agent.** `AGENTS.md` describes the shed
-   once; runtime files (`CLAUDE.md`, `GEMINI.md`) only import it. Skills are
-   Markdown steps, not code bound to one runtime.
+   once, generated from the same definitions the code parses, so the two can't
+   drift. Runtime files (`CLAUDE.md`, `GEMINI.md`) only import it. Skills
+   describe formats, not commands, so they outlive any runtime or CLI version.
 3. **Agents edit, git remembers.** Changes go straight into the files, kept
    small and in the usual formats. The diff is the review; git is the undo.
 
@@ -81,6 +85,6 @@ shed owns only the formats — records and skills — that agents read and write
 1. **Does it still work if I edit the files by hand?** If not, it's too clever.
 2. **Does it reduce what I hold in my head?** If not, it's clutter.
 3. **Is it a recurring procedure?** Then it's a skill (Markdown steps), not a
-   feature. Code is only for what must be exact and repeatable — dates,
-   sweeping, caps, sync. Everything that needs judgment is a skill, where you or
-   any agent can read and change it.
+   feature. Code is only for what must be exact and repeatable: dates,
+   carry-forward, sweeping, health checks, sync. Everything that needs judgment
+   is a skill, where you or any agent can read and change it.

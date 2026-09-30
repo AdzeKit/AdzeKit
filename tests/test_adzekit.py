@@ -1,186 +1,220 @@
+import subprocess
 from datetime import date
 
 import pytest
 
-from adzekit import Workspace, WorkspaceError, daily, loops, projects, review
+from adzekit import Workspace, WorkspaceError, __version__, records
 from adzekit.cli import main
+from adzekit.shed import init
+from adzekit.sync import sync
 
 MON = date(2026, 9, 28)
 
 
-@pytest.fixture
-def ws(tmp_path, monkeypatch):
+def git(cwd, *args):
+    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True,
+                          check=True).stdout
+
+
+@pytest.fixture(autouse=True)
+def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.delenv("ADZEKIT_WORKSPACE", raising=False)
-    monkeypatch.delenv("ADZEKIT_SHED", raising=False)
-    workspace, _ = Workspace.init(tmp_path / "ws")
-    return workspace
+    for key in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{key}_NAME", "t")
+        monkeypatch.setenv(f"GIT_{key}_EMAIL", "t@t")
+    monkeypatch.chdir(tmp_path)
 
 
-# --- workspace -----------------------------------------------------------
+@pytest.fixture
+def ws(tmp_path):
+    return init(tmp_path / "shed")[0]
 
 
-def test_init_creates_contract_and_is_idempotent(ws):
-    for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md", ".gitignore", "loops/active.md",
-                 "skills/daily-start.md", "projects/backlog"):
-        assert (ws.root / name).exists(), name
+# --- init ----------------------------------------------------------------
+
+
+def test_init_generates_contract_and_is_idempotent(ws):
+    agents = (ws.root / "AGENTS.md").read_text()
+    assert f"adzekit:begin v{__version__}" in agents and "## About me" in agents
+    assert "at most 5" in agents and "at most 3" in agents  # rendered from settings
     assert "@AGENTS.md" in (ws.root / "CLAUDE.md").read_text()
-    (ws.root / "AGENTS.md").write_text("mine")
-    _, created = Workspace.init(ws.root)
-    assert created == []
-    assert (ws.root / "AGENTS.md").read_text() == "mine"
+    assert (ws.root / "skills/daily-start.md").is_file()
+    assert (ws.root / ".git").is_dir()
+    assert init(ws.root)[1] == []
 
 
-def test_init_records_global_config(ws, tmp_path):
-    config = tmp_path / "home" / ".config" / "adzekit" / "config"
-    assert config.read_text().strip() == f"workspace = {ws.root}"
+def test_init_refreshes_only_the_managed_block(ws):
+    agents = ws.root / "AGENTS.md"
+    agents.write_text(agents.read_text().replace("<!-- Who you are", "I build agents.\n<!--"))
+    (ws.root / ".adzekit").write_text("max_active_projects = 10\n")
+    assert "AGENTS.md" in init(ws.root)[1]
+    text = agents.read_text()
+    assert "at most 10" in text and "I build agents." in text
+    assert text.count("adzekit:begin") == 1
+
+
+def test_init_respects_existing_files(tmp_path):
+    root = tmp_path / "old"
+    root.mkdir()
+    (root / "CLAUDE.md").write_text("@AGENTS.md\n\nMy Claude notes.\n")
+    (root / ".gitignore").write_text("*\n!*/\n!*.md\n")
+    (root / "skills").mkdir()
+    (root / "skills/daily-start.md").write_text("mine")
+    init(root)
+    assert (root / "CLAUDE.md").read_text() == "@AGENTS.md\n\nMy Claude notes.\n"
+    assert (root / "skills/daily-start.md").read_text() == "mine"
+    ignore = (root / ".gitignore").read_text()
+    assert ignore.startswith("*\n") and ignore.index("!.adzekit") > ignore.index("*")
+    # settings and merge rules must travel, even under an ignore-everything rule
+    git(root, "add", "-A")
+    tracked = git(root, "ls-files").split()
+    assert ".adzekit" in tracked and ".gitattributes" in tracked
+
+
+def test_records_merge_by_union(ws):
+    for path in ("daily/2026-09-28.md", "loops/active.md", "projects/archive/x.md"):
+        assert git(ws.root, "check-attr", "merge", path).strip().endswith("union"), path
+    assert git(ws.root, "check-attr", "merge", "AGENTS.md").strip().endswith("unspecified")
 
 
 def test_find_order(ws, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    assert Workspace.find().root == ws.root  # global config
-    monkeypatch.chdir(ws.root / "daily")
+    assert Workspace.find().root == ws.root  # global config written by init
+    monkeypatch.chdir(ws.root / "skills")
     assert Workspace.find().root == ws.root  # enclosing folder
-    monkeypatch.setenv("ADZEKIT_SHED", str(tmp_path / "missing"))
+    monkeypatch.setenv("ADZEKIT_WORKSPACE", str(tmp_path / "missing"))
     with pytest.raises(WorkspaceError, match="no .adzekit"):
         Workspace.find()
 
 
-def test_settings_read_marker_with_defaults(ws):
-    ws.marker.write_text("max_active_projects = 10\nmax_daily_tasks = oops\n")
-    assert ws.setting("max_active_projects") == 10
-    assert ws.setting("max_daily_tasks") == 5
-    assert ws.setting("stale_loop_days") == 7
+# --- records -------------------------------------------------------------
 
 
-# --- loops ---------------------------------------------------------------
-
-
-def test_parse_real_world_line():
-    text = (
-        "# Active Loops\n\n"
-        "- [ ] (S) [2026-09-08] **Unblock #pcc login** — IT on it (2026-09-12)\n"
-        "  - [ ] nested notes are not loops\n"
-        "- [x] [2026-13-40] bad date still parses\n"
-        "free text is ignored\n"
-    )
-    first, second = loops.parse(text)
-    assert first.size == "S" and first.opened == date(2026, 9, 8)
-    assert first.title == "**Unblock #pcc login** — IT on it"
-    assert first.due == date(2026, 9, 12) and first.overdue(MON)
+def test_parse_real_world_loop_line():
+    text = ("# Active Loops\n\n"
+            "- [ ] (S) [2026-09-08] **Unblock #pcc login** — IT on it (2026-09-12)\n"
+            "  - [ ] nested notes are not loops\n"
+            "- [x] [2026-13-40] bad date still parses\n")
+    first, second = records.parse_loops(text)
+    assert (first.size, first.opened, first.due) == ("S", date(2026, 9, 8), date(2026, 9, 12))
+    assert first.title == "**Unblock #pcc login** — IT on it" and first.overdue(MON)
     assert second.done and second.opened is None
 
 
-def test_add_close_sweep_preserves_other_lines(ws):
-    ws.loops_file.write_text("# Active Loops\n\nNotes stay put.\n\n- [ ] [2026-09-01] Old one\n")
-    loops.add(ws, "Send estimate to Ana", today=MON, size="m", due=date(2026, 10, 1))
-    text = ws.loops_file.read_text()
-    assert "- [ ] (M) [2026-09-28] Send estimate to Ana (2026-10-01)" in text
-    assert text.index("Old one") < text.index("Send estimate")
-
-    assert loops.close(ws, "estimate").title == "Send estimate to Ana"
-    assert loops.sweep(ws, today=MON) == [
-        "- [x] (M) [2026-09-28] Send estimate to Ana (2026-10-01)"
-    ]
-    assert "Notes stay put." in ws.loops_file.read_text()
-    assert [lp.title for lp in loops.open_loops(ws)] == ["Old one"]
-
-    loops.close(ws, "1")
-    loops.sweep(ws, today=MON)
-    archive = ws.loops_archive.read_text()
-    assert archive.count("## 2026-09-28") == 1
-    assert "Old one" in archive and "Send estimate" in archive
-
-
-def test_close_rejects_ambiguous_and_missing(ws):
-    loops.add(ws, "Call Ana", today=MON)
-    loops.add(ws, "Email Ana", today=MON)
-    with pytest.raises(WorkspaceError, match="2 loops match"):
-        loops.close(ws, "ana")
-    with pytest.raises(WorkspaceError, match="No open loop #9"):
-        loops.close(ws, "9")
-
-
-# --- daily ---------------------------------------------------------------
-
-
-def test_today_carries_unfinished_up_to_cap(ws):
-    ws.marker.write_text("max_daily_tasks = 2\n")
+def test_today_carries_forward_and_sweeps(ws):
+    (ws.root / ".adzekit").write_text("max_daily_tasks = 2\n")
+    ws.daily_path(date(2026, 9, 25)).parent.mkdir(exist_ok=True)
     ws.daily_path(date(2026, 9, 25)).write_text(
-        "# 2026-09-25 Friday\n\n## Intention\n- [x] Done\n- [ ] A\n- [ ] B\n- [ ] C\n\n## Log\n"
-    )
-    result = daily.today(ws, MON)
+        "## Intention\n- [x] Done\n- [ ] A\n- [ ] B\n- [ ] C\n")
+    (ws.root / "loops/active.md").write_text(
+        "# Active Loops\n\nNotes stay.\n- [x] [2026-09-01] Sent it\n- [ ] [2026-09-02] Open\n")
+
+    result = records.today(ws, MON)
     assert result.created and result.carried == ["A", "B"] and result.left_behind == ["C"]
-    assert daily.intentions(result.path.read_text()) == (["A", "B"], [])
-    assert not daily.today(ws, MON).created
+    assert result.swept == ["- [x] [2026-09-01] Sent it"]
+    assert records.intentions(result.path.read_text()) == (["A", "B"], [])
+    assert (ws.root / "loops/active.md").read_text() == (
+        "# Active Loops\n\nNotes stay.\n- [ ] [2026-09-02] Open\n")
+    assert "## 2026-09-28\n- [x] [2026-09-01] Sent it" in (ws.root / "loops/archive.md").read_text()
+
+    again = records.today(ws, MON)
+    assert not again.created and again.swept == []
 
 
-def test_log_appends_inside_section(ws):
-    daily.log(ws, "first", MON)
-    daily.log(ws, "second", MON)
-    lines = ws.daily_path(MON).read_text().splitlines()
-    log = lines.index("## Log")
-    assert lines[log + 1 : log + 4] == ["- first", "- second", ""]
-    assert lines[log + 4] == "## Reflection"
-
-
-# --- projects ------------------------------------------------------------
-
-
-def test_project_cap_and_moves(ws):
-    ws.marker.write_text("max_active_projects = 1\n")
-    projects.new(ws, "acme-poc", today=MON)
-    with pytest.raises(WorkspaceError, match="1/1 active"):
-        projects.new(ws, "globex", today=MON)
-    projects.new(ws, "globex", today=MON, state="backlog")
-    with pytest.raises(WorkspaceError, match="already exists"):
-        projects.new(ws, "globex", today=MON)
-    projects.move(ws, "acme-poc", "archive")
-    projects.move(ws, "globex", "active")
-    [active] = projects.load(ws, "active", MON)
-    assert active.slug == "globex" and active.title == "Globex"
-    assert active.last_touched == MON
-
-
-def test_last_touched_ignores_future_dates():
-    text = "- 2026-09-17: done\n- 2026-10-30: planned workshop\n"
-    assert projects.last_touched(text, MON) == date(2026, 9, 17)
-
-
-# --- review --------------------------------------------------------------
-
-
-def test_review_collects_week(ws):
-    ws.marker.write_text("stale_loop_days = 3\n")
+def test_review_gathers_the_week(ws):
+    (ws.root / ".adzekit").write_text("stale_loop_days = 3\n")
+    (ws.root / "daily").mkdir(exist_ok=True)
     ws.daily_path(date(2026, 9, 29)).write_text("## Intention\n- [x] Shipped demo\n- [ ] Not yet\n")
-    loops.add(ws, "Old promise", today=date(2026, 9, 1))
-    loops.add(ws, "Fresh promise", today=MON)
-    loops.add(ws, "Finished thing", today=MON)
-    loops.close(ws, "Finished")
-    loops.sweep(ws, today=date(2026, 9, 30))
-    projects.new(ws, "quiet", today=date(2026, 8, 1))
+    (ws.root / "loops/active.md").write_text(
+        "- [ ] [2026-09-01] Old promise\n- [ ] [2026-09-28] Fresh\n- [x] [2026-09-28] Finished\n")
+    records.sweep(ws, date(2026, 9, 30))
+    (ws.root / "projects").mkdir()
+    (ws.root / "projects/quiet.md").write_text("# Quiet\n\n## Log\n- 2026-08-01: Created.\n")
 
-    text = review.build(ws, date(2026, 10, 1))
+    text = records.build_review(ws, date(2026, 10, 1))
     assert text.startswith("# Review 2026-W40 (Sep 28 – Oct 04)")
-    assert "- Shipped demo" in text and "Not yet" not in text
-    assert "- Finished thing" in text
-    assert "Old promise — open 30d" in text and "Fresh promise" not in text
+    assert "- Shipped demo" in text and "Not yet" not in text and "- Finished" in text
+    assert "Old promise — open 30d" in text and "Fresh" not in text
     assert "quiet — last dated 2026-08-01" in text
+    path, created = records.write_review(ws, date(2026, 10, 1))
+    assert created and path.name == "2026-W40.md"
+    assert not records.write_review(ws, date(2026, 10, 1))[1]
 
-    path, created = review.write(ws, date(2026, 10, 1))
-    assert created and not review.write(ws, date(2026, 10, 1))[1]
-    assert path.name == "2026-W40.md"
+
+def test_last_touched_ignores_future_dates(ws):
+    (ws.root / "projects").mkdir()
+    (ws.root / "projects/cn.md").write_text("# CN\n- 2026-09-17: done\n- 2026-10-30: workshop\n")
+    [project] = records.active_projects(ws, MON)
+    assert project.title == "CN" and project.last_touched == date(2026, 9, 17)
+
+
+# --- sync ----------------------------------------------------------------
+
+
+@pytest.fixture
+def two_devices(tmp_path, ws):
+    """A laptop shed pushed to a bare remote, and a phone that joined it."""
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(remote))
+    git(ws.root, "remote", "add", "origin", str(remote))
+    (ws.root / "daily").mkdir(exist_ok=True)
+    ws.daily_path(MON).write_text("# Mon\n\n## Log\n- seed\n\n## Reflection\n")
+    assert sync(ws) == ["committed local changes", "pushed"]
+    phone, _ = init(tmp_path / "phone", remote=str(remote))
+    return ws, phone
+
+
+def test_join_existing_shed_by_clone(two_devices):
+    laptop, phone = two_devices
+    assert phone.daily_path(MON).read_text() == laptop.daily_path(MON).read_text()
+    assert init(phone.root)[1] == []  # nothing to regenerate on the second device
+
+
+def test_concurrent_appends_keep_both_lines(two_devices):
+    laptop, phone = two_devices
+    for device, line in ((phone, "- phone note"), (laptop, "- laptop note")):
+        path = device.daily_path(MON)
+        path.write_text(path.read_text().replace("- seed\n", f"- seed\n{line}\n"))
+    sync(phone)
+    assert sync(laptop) == ["committed local changes", "pulled", "pushed"]
+    log = laptop.daily_path(MON).read_text()
+    assert "- phone note" in log and "- laptop note" in log and "<<<<" not in log
+    sync(phone)
+    assert phone.daily_path(MON).read_text() == log
+
+
+def test_unmergeable_change_aborts_cleanly(two_devices):
+    laptop, phone = two_devices
+    for device, text in ((phone, "phone rules"), (laptop, "laptop rules")):
+        skill = device.root / "skills/capture.md"
+        skill.write_text(skill.read_text().replace("# Capture", f"# Capture ({text})"))
+    sync(phone)
+    with pytest.raises(WorkspaceError, match=r"Nothing was lost(.|\n)*skills/capture.md"):
+        sync(laptop)
+    assert not (laptop.root / ".git/rebase-merge").exists()
+    assert "laptop rules" in (laptop.root / "skills/capture.md").read_text()
+    assert git(laptop.root, "status", "--porcelain") == ""  # committed, not stranded
+
+
+def test_sync_without_remote_commits_locally(ws):
+    assert sync(ws) == ["committed local changes", "no remote configured; kept local"]
+    assert sync(ws) == ["no remote configured; kept local"]
+
+
+def test_sync_refuses_a_stuck_repository(ws):
+    sync(ws)
+    (ws.root / ".git/rebase-merge").mkdir()
+    with pytest.raises(WorkspaceError, match="rebase is already in progress"):
+        sync(ws)
 
 
 # --- cli -----------------------------------------------------------------
 
 
 def test_cli_round_trip(ws, capsys):
-    base = ["-w", str(ws.root)]
-    assert main(base + ["loop", "add", "Reply", "to", "Ana", "--due", "2020-01-01"]) == 0
-    assert main(base + ["log", "Met", "Ana"]) == 0
-    assert main(base + ["status"]) == 0
+    (ws.root / "loops/active.md").write_text("- [ ] [2020-01-01] Reply to Ana (2020-01-02)\n")
+    assert main(["-w", str(ws.root), "today"]) == 0
+    assert main(["-w", str(ws.root), "status"]) == 0
     out = capsys.readouterr().out
-    assert "1 open, 1 overdue" in out and "overdue: Reply to Ana" in out
-    assert main(base + ["loop", "close", "nothing"]) == 1
-    assert "No open loop matches" in capsys.readouterr().err
+    assert "1 open, 1 overdue, 1 stale" in out and "overdue: Reply to Ana" in out
+    assert main(["-w", str(ws.root / "nope"), "status"]) == 1
