@@ -18,7 +18,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         print(f"  {item}")
     if not changed:
         print("  up to date")
-    print("Next: `adzekit sync` to commit" + (" and push." if args.remote else "."))
+    print("Next: `adzekit sync`.")
 
 
 def cmd_today(args: argparse.Namespace) -> None:
