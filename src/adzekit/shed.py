@@ -61,6 +61,43 @@ def write_atomic(path: Path, text: str) -> None:
     tmp.replace(path)
 
 
+_LEGACY_KEYS = {"workspace", "shed"}
+
+
+def registry() -> dict[str, Path]:
+    """Sheds registered on this machine, as ``name = path`` lines in the global config."""
+    sheds: dict[str, Path] = {}
+    for key, value in read_kv(global_config_path()).items():
+        path = Path(value).expanduser().resolve()
+        if path not in sheds.values():
+            sheds[path.name if key in _LEGACY_KEYS else key] = path
+    return sheds
+
+
+def register(name: str, root: Path) -> bool:
+    """Record ``name = root`` in the global config. Returns True if it changed."""
+    config = global_config_path()
+    lines = config.read_text(encoding="utf-8").splitlines() if config.is_file() else []
+    kept = []
+    for line in lines:
+        key, sep, value = line.partition("=")
+        same_key = sep and key.strip() == name
+        same_legacy = sep and key.strip() in _LEGACY_KEYS and (
+            Path(value.strip()).expanduser().resolve() == root)
+        if not (same_key or same_legacy):
+            kept.append(line)
+    new = "\n".join([*kept, f"{name} = {root}"]) + "\n"
+    if config.is_file() and config.read_text(encoding="utf-8") == new:
+        return False
+    write_atomic(config, new)
+    return True
+
+
+def _enclosing() -> Path | None:
+    here = Path.cwd().resolve()
+    return next((p for p in (here, *here.parents) if (p / MARKER).is_file()), None)
+
+
 @dataclass(frozen=True)
 class Workspace:
     root: Path
@@ -70,20 +107,34 @@ class Workspace:
 
     @classmethod
     def find(cls, explicit: str | Path | None = None) -> "Workspace":
-        """Resolve the shed: flag, env, enclosing folder, then global config."""
-        candidate = explicit or os.environ.get("ADZEKIT_WORKSPACE")
+        """One shed: a name or path, then env, the enclosing folder, then the first registered."""
+        if explicit and str(explicit) in registry():
+            explicit = registry()[str(explicit)]
+        candidate = explicit or os.environ.get("ADZEKIT_WORKSPACE") or _enclosing()
         if not candidate:
-            here = Path.cwd().resolve()
-            candidate = next((p for p in (here, *here.parents) if (p / MARKER).is_file()), None)
-        if not candidate:
-            config = read_kv(global_config_path())
-            candidate = config.get("workspace") or config.get("shed")
+            candidate = next(iter(registry().values()), None)
         if not candidate:
             raise WorkspaceError("No shed found. Run `adzekit init PATH` first.")
-        ws = cls(Path(candidate))
+        return cls._checked(Path(candidate))
+
+    @classmethod
+    def targets(cls, explicit: str | Path | None = None) -> list["Workspace"]:
+        """The sheds a command acts on: the named or enclosing one, else every registered shed."""
+        if explicit or os.environ.get("ADZEKIT_WORKSPACE") or _enclosing():
+            return [cls.find(explicit)]
+        sheds = [cls(path) for path in registry().values() if (path / MARKER).is_file()]
+        return sheds or [cls.find()]
+
+    @classmethod
+    def _checked(cls, root: Path) -> "Workspace":
+        ws = cls(root)
         if not (ws.root / MARKER).is_file():
             raise WorkspaceError(f"{ws.root} has no {MARKER} file. Run `adzekit init {ws.root}`.")
         return ws
+
+    @property
+    def name(self) -> str:
+        return read_kv(self.root / MARKER).get("name") or self.root.name
 
     def setting(self, key: str) -> int:
         raw = read_kv(self.root / MARKER).get(key)
@@ -146,9 +197,11 @@ def agents_contract(ws: Workspace) -> str:
     return f"""
 # Shed
 
-This folder is an AdzeKit shed: plain Markdown shared by a person and every agent
-that helps them. It holds **records** (their state) and **skills** (how they want
-recurring work done). Read this whole file before working here.
+This folder is the **{ws.name}** shed: plain Markdown shared by a person and every
+agent that helps them. It holds **records** (their state) and **skills** (how they
+want recurring work done). Read this whole file before working here. A person may
+keep several sheds; keep each record in the shed it belongs to, and never copy
+content between sheds unless they ask.
 
 ## Records
 
@@ -268,7 +321,8 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
 
 
-def init(root: str | Path, remote: str | None = None) -> tuple[Workspace, list[str]]:
+def init(root: str | Path, remote: str | None = None,
+         name: str | None = None) -> tuple[Workspace, list[str]]:
     """Create or refresh a shed. Idempotent; never touches text outside managed blocks."""
     root = Path(root).expanduser().resolve()
     changed: list[str] = []
@@ -288,11 +342,20 @@ def init(root: str | Path, remote: str | None = None) -> tuple[Workspace, list[s
         _git(root, "remote", "add", "origin", remote)
         changed.append(f"remote origin → {remote}")
 
-    ws = Workspace(root)
     marker = root / MARKER
     if not marker.exists():
         marker.write_text("".join(f"{k} = {v}\n" for k, v in DEFAULTS.items()), encoding="utf-8")
         changed.append(MARKER)
+    settings = read_kv(marker)
+    shed_name = name or settings.get("name") or root.name
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", shed_name):
+        raise WorkspaceError("Shed names are lowercase letters, digits, and hyphens.")
+    if settings.get("name") != shed_name:
+        lines = [ln for ln in marker.read_text(encoding="utf-8").splitlines()
+                 if ln.partition("=")[0].strip() != "name"]
+        write_atomic(marker, f"name = {shed_name}\n" + "".join(f"{ln}\n" for ln in lines))
+        changed.append(f"{MARKER} name = {shed_name}")
+    ws = Workspace(root)
 
     prefix, begin, end = _md_markers()
     about = "\n## About me\n\n<!-- Who you are, what you work on, how you like answers. -->\n"
@@ -329,8 +392,6 @@ def init(root: str | Path, remote: str | None = None) -> tuple[Workspace, list[s
             write_atomic(path, text)
             changed.append(f"{SKILLS_DIR}/{name}.md")
 
-    config = global_config_path()
-    if not config.exists():
-        write_atomic(config, f"workspace = {root}\n")
-        changed.append(str(config))
+    if register(shed_name, root):
+        changed.append(f"registered {shed_name} in {global_config_path()}")
     return ws, changed

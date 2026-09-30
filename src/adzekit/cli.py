@@ -11,9 +11,18 @@ from adzekit.shed import Workspace, WorkspaceError, block_version, init
 from adzekit.sync import sync
 
 
+def _each(args: argparse.Namespace, *, always_header: bool = False):
+    """Yield each target shed, with a header when there are several (or when asked)."""
+    sheds = Workspace.targets(args.workspace)
+    for i, ws in enumerate(sheds):
+        if len(sheds) > 1 or always_header:
+            print(f"{'' if i == 0 else chr(10)}== {ws.name}  ({ws.root})")
+        yield ws
+
+
 def cmd_init(args: argparse.Namespace) -> None:
-    ws, changed = init(args.path or args.workspace or ".", remote=args.remote)
-    print(f"Shed: {ws.root}")
+    ws, changed = init(args.path or args.workspace or ".", remote=args.remote, name=args.name)
+    print(f"Shed {ws.name}: {ws.root}")
     for item in changed:
         print(f"  {item}")
     if not changed:
@@ -22,7 +31,11 @@ def cmd_init(args: argparse.Namespace) -> None:
 
 
 def cmd_today(args: argparse.Namespace) -> None:
-    ws = Workspace.find(args.workspace)
+    for ws in _each(args):
+        _today(ws)
+
+
+def _today(ws: Workspace) -> None:
     result = records.today(ws, date.today())
     rel = result.path.relative_to(ws.root)
     if result.swept:
@@ -36,7 +49,11 @@ def cmd_today(args: argparse.Namespace) -> None:
 
 
 def cmd_status(args: argparse.Namespace) -> None:
-    ws = Workspace.find(args.workspace)
+    for ws in _each(args, always_header=True):
+        _status(ws)
+
+
+def _status(ws: Workspace) -> None:
     today = date.today()
     h = records.health(ws, today)
     note = ws.daily_path(today)
@@ -46,7 +63,6 @@ def cmd_status(args: argparse.Namespace) -> None:
     else:
         day = "no note yet (adzekit today)"
     cap = ws.setting("max_active_projects")
-    print(f"Shed:      {ws.root}")
     print(f"Today:     {day}")
     print(f"Loops:     {len(h.loops)} open, {len(h.overdue)} overdue, {len(h.stale)} stale")
     over = "  OVER CAP" if len(h.projects) > cap else ""
@@ -59,14 +75,23 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 
 def cmd_review(args: argparse.Namespace) -> None:
-    ws = Workspace.find(args.workspace)
-    path, created = records.write_review(ws, args.date)
-    print(f"{'Created' if created else 'Exists'}: {path.relative_to(ws.root)}")
+    for ws in _each(args):
+        path, created = records.write_review(ws, args.date)
+        print(f"{'Created' if created else 'Exists'}: {path.relative_to(ws.root)}")
 
 
 def cmd_sync(args: argparse.Namespace) -> None:
-    for step in sync(Workspace.find(args.workspace), args.message):
-        print(step)
+    """Sync every target; one shed failing doesn't stop the others."""
+    failures = []
+    for ws in _each(args):
+        try:
+            for step in sync(ws, args.message):
+                print(step)
+        except WorkspaceError as exc:
+            print(f"adzekit: {exc}", file=sys.stderr)
+            failures.append(ws.name)
+    if failures:
+        raise WorkspaceError(f"sync failed for: {', '.join(failures)}")
 
 
 def _date(text: str) -> date:
@@ -80,12 +105,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="adzekit", description="Markdown habits for people "
                                      "and their agents.")
     parser.add_argument("--version", action="version", version=f"adzekit {__version__}")
-    parser.add_argument("-w", "--workspace", help="shed folder (default: auto-detect)")
+    parser.add_argument("-w", "--workspace", metavar="SHED",
+                        help="shed name or folder (default: the one you're in, else all)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("init", help="create, join, or refresh a shed")
     p.add_argument("path", nargs="?")
     p.add_argument("--remote", help="git URL; clones it if the folder is empty")
+    p.add_argument("--name", help="short name for this shed (default: folder name)")
     p.set_defaults(func=cmd_init)
 
     sub.add_parser("today", help="today's note: create, carry forward, sweep loops"

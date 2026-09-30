@@ -92,12 +92,12 @@ def test_find_order(ws, tmp_path, monkeypatch):
 
 def test_parse_real_world_loop_line():
     text = ("# Active Loops\n\n"
-            "- [ ] (S) [2026-09-08] **Unblock #pcc login** — IT on it (2026-09-12)\n"
+            "- [ ] (S) [2026-09-08] **Unblock #acme login** — IT on it (2026-09-12)\n"
             "  - [ ] nested notes are not loops\n"
             "- [x] [2026-13-40] bad date still parses\n")
     first, second = records.parse_loops(text)
     assert (first.size, first.opened, first.due) == ("S", date(2026, 9, 8), date(2026, 9, 12))
-    assert first.title == "**Unblock #pcc login** — IT on it" and first.overdue(MON)
+    assert first.title == "**Unblock #acme login** — IT on it" and first.overdue(MON)
     assert second.done and second.opened is None
 
 
@@ -143,9 +143,10 @@ def test_review_gathers_the_week(ws):
 
 def test_last_touched_ignores_future_dates(ws):
     (ws.root / "projects").mkdir()
-    (ws.root / "projects/cn.md").write_text("# CN\n- 2026-09-17: done\n- 2026-10-30: workshop\n")
+    note = "# Acme\n- 2026-09-17: done\n- 2026-10-30: workshop\n"
+    (ws.root / "projects/acme.md").write_text(note)
     [project] = records.active_projects(ws, MON)
-    assert project.title == "CN" and project.last_touched == date(2026, 9, 17)
+    assert project.title == "Acme" and project.last_touched == date(2026, 9, 17)
 
 
 # --- sync ----------------------------------------------------------------
@@ -218,3 +219,56 @@ def test_cli_round_trip(ws, capsys):
     out = capsys.readouterr().out
     assert "1 open, 1 overdue, 1 stale" in out and "overdue: Reply to Ana" in out
     assert main(["-w", str(ws.root / "nope"), "status"]) == 1
+
+
+# --- several sheds ---------------------------------------------------------
+
+
+def test_sheds_register_by_name_and_act_together(tmp_path, capsys):
+    work, _ = init(tmp_path / "work-shed", name="work")
+    life, _ = init(tmp_path / "life-shed", name="life")
+    assert work.name == "work" and "name = work" in (work.root / ".adzekit").read_text()
+    assert "the **life** shed" in (life.root / "AGENTS.md").read_text()
+    assert Workspace.find("life").root == life.root  # -w accepts a name
+    assert [ws.name for ws in Workspace.targets()] == ["work", "life"]
+
+    assert main(["status"]) == 0  # outside any shed: every registered shed
+    out = capsys.readouterr().out
+    assert "== work" in out and "== life" in out
+
+
+def test_inside_a_shed_only_that_shed_is_touched(tmp_path, monkeypatch):
+    work, _ = init(tmp_path / "work", name="work")
+    life, _ = init(tmp_path / "life", name="life")
+    monkeypatch.chdir(work.root / "skills")
+    assert [ws.name for ws in Workspace.targets()] == ["work"]
+    assert main(["today"]) == 0
+    assert (work.root / "daily").is_dir() and not (life.root / "daily").exists()
+
+
+def test_register_replaces_legacy_entry_for_same_folder(tmp_path):
+    root = tmp_path / "old-shed"
+    config = tmp_path / "home/.config/adzekit/config"
+    config.parent.mkdir(parents=True)
+    config.write_text(f"shed = {root}\n")
+    init(root, name="work")
+    assert config.read_text() == f"work = {root.resolve()}\n"
+    assert init(root)[1] == []  # the name travels in .adzekit; nothing to redo
+
+
+def test_sync_keeps_going_when_one_shed_fails(tmp_path, capsys):
+    good, _ = init(tmp_path / "good", name="good")
+    bad, _ = init(tmp_path / "bad", name="bad")
+    (bad.root / ".git/rebase-merge").mkdir(parents=True)
+    assert main(["sync"]) == 1
+    captured = capsys.readouterr()
+    assert "rebase is already in progress" in captured.err
+    assert "sync failed for: bad" in captured.err
+    assert "committed local changes" in captured.out
+    assert subprocess.run(["git", "-C", str(good.root), "status", "--porcelain"],
+                          capture_output=True, text=True).stdout == ""
+
+
+def test_shed_names_are_validated(tmp_path):
+    with pytest.raises(WorkspaceError, match="lowercase"):
+        init(tmp_path / "x", name="My Life")

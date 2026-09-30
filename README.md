@@ -24,14 +24,16 @@ Cursor, Gemini CLI) and say "run daily start".
 
 | Command | Does |
 |---|---|
-| `adzekit init [PATH] [--remote URL]` | Create, join, or refresh a shed. Safe to re-run. |
+| `adzekit init [PATH] [--remote URL] [--name NAME]` | Create, join, or refresh a shed. Safe to re-run. |
 | `adzekit today` | Create today's note, carry unfinished intentions forward, sweep ticked loops. |
 | `adzekit status` | One-screen health: loops open/overdue/stale, projects vs. cap. |
 | `adzekit review` | Write this week's review scaffold with the decisions to make. |
 | `adzekit sync` | Commit, rebase onto the remote, push. |
 
-Everything else (adding a loop, logging, moving a project) is an ordinary edit
-to a Markdown file, made by you or an agent.
+Inside a shed, a command acts on that shed. Anywhere else, it acts on every shed
+registered on this machine; `-w NAME` picks one. Everything else (adding a loop,
+logging, moving a project) is an ordinary edit to a Markdown file, made by you or
+an agent.
 
 ## The shed
 
@@ -68,6 +70,26 @@ a file in `skills/`. Skills describe file formats, not CLI commands, so they
 keep working whatever runtime reads them. When a skill needs email, chat, a CRM
 or a calendar, it uses your agent's own tools.
 
+## Several sheds
+
+One system doesn't have to mean one repository. Data has owners: your employer
+owns customer work, and you own the rest of your life. Keep a shed for each, with
+the same format, the same skills habit, and the same CLI:
+
+```bash
+adzekit init ~/sheds/life --name life --remote git@github.com:you/life.git
+adzekit init ~/sheds/work --name work --remote <your employer's approved git host>
+adzekit status        # both sheds
+adzekit -w work sync  # just one
+```
+
+Each shed's name is stored in its `.adzekit` file, so it travels to every device.
+Each shed's `AGENTS.md` tells agents to keep records in the shed they belong to.
+Cloud agents open one repository at a time, which enforces the boundary for you.
+When something you learned at work generalizes, rewrite it without customer
+detail into your life shed's `knowledge/`. That's the part you keep when you
+change jobs.
+
 ## Sync
 
 Your shed has to reach three kinds of client:
@@ -102,8 +124,10 @@ Two things to avoid:
   services sync the files under `.git` independently and can corrupt the
   repository. Git already does the syncing.
 - **Keep raw material out of git.** Transcripts, PDFs, and exports go in
-  `stock/`, which is ignored. Keep originals where they came from (such as
-  Drive) and link to them from your notes.
+  `stock/`, which is ignored. Make `stock` a symlink into a synced drive folder
+  (for example `ln -s ~/Library/CloudStorage/<drive>/shed-stock stock`), so the
+  files sync through the drive, stay out of git, and are still readable by
+  local agents. Only `stock/` lives in the drive; the repository never does.
 
 ## Development
 
