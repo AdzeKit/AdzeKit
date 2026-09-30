@@ -246,8 +246,8 @@ else is needed. If the CLI isn't installed, the formats above are the contract.
 
 
 GITIGNORE = """
-# Raw material stays local; link to it from projects instead.
-stock/
+# Raw material stays out of git (a folder, or a symlink into a synced drive).
+/stock
 *.tmp
 .DS_Store
 .obsidian/workspace*.json

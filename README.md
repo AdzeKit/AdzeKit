@@ -111,6 +111,8 @@ hub. `adzekit sync` is built so it can run unattended:
 - **It never leaves a mess.** If git truly can't combine two changes (say, both
   devices rewrote the same skill), sync aborts, keeps your work committed
   locally, and names the file. The repository is never left mid-rebase.
+- **Only `origin` is pushed to.** Rename a remote (for example to
+  `parked`) and that shed syncs locally until you add an `origin` again.
 - **Agents sync themselves.** `AGENTS.md` tells every agent to run
   `adzekit sync` before starting and after finishing. On your phone, turn on
   the Git plugin's auto pull and push.

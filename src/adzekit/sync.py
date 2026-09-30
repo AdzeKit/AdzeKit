@@ -54,10 +54,11 @@ def sync(ws: Workspace, message: str | None = None) -> list[str]:
             raise WorkspaceError(f"git commit failed: {_first_line(commit)}")
         steps.append("committed local changes")
 
-    remotes = _git(ws, "remote").stdout.split()
-    if not remotes:
-        return steps + ["no remote configured; kept local"]
-    remote = "origin" if "origin" in remotes else remotes[0]
+    # Only `origin` is ever pushed to, so parking a remote under another name is
+    # a reliable way to keep a shed local.
+    if "origin" not in _git(ws, "remote").stdout.split():
+        return steps + ["no origin remote; kept local"]
+    remote = "origin"
     branch = _git(ws, "branch", "--show-current").stdout.strip()
     if not branch:
         raise WorkspaceError("HEAD is detached; check out a branch before syncing.")

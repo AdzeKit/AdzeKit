@@ -198,8 +198,24 @@ def test_unmergeable_change_aborts_cleanly(two_devices):
 
 
 def test_sync_without_remote_commits_locally(ws):
-    assert sync(ws) == ["committed local changes", "no remote configured; kept local"]
-    assert sync(ws) == ["no remote configured; kept local"]
+    assert sync(ws) == ["committed local changes", "no origin remote; kept local"]
+    assert sync(ws) == ["no origin remote; kept local"]
+
+
+def test_sync_only_pushes_to_origin(ws, tmp_path):
+    parked = tmp_path / "parked.git"
+    git(tmp_path, "init", "-q", "--bare", str(parked))
+    git(ws.root, "remote", "add", "personal-legacy", str(parked))
+    assert sync(ws)[-1] == "no origin remote; kept local"
+    assert git(parked, "rev-list", "--all") == ""  # nothing was pushed
+
+
+def test_stock_symlink_is_never_committed(ws, tmp_path):
+    drive = tmp_path / "drive"
+    drive.mkdir()
+    (ws.root / "stock").symlink_to(drive)
+    sync(ws)
+    assert "stock" not in git(ws.root, "ls-files").split()
 
 
 def test_sync_refuses_a_stuck_repository(ws):
