@@ -130,11 +130,27 @@ class Today:
     carried: list[str] = field(default_factory=list)
     left_behind: list[str] = field(default_factory=list)
     swept: list[str] = field(default_factory=list)
+    archived: list[str] = field(default_factory=list)
+
+
+def archive_dailies(ws: Workspace, today: date) -> list[str]:
+    """Move daily notes older than the cutoff into ``daily/archive/``."""
+    cutoff = today - timedelta(days=ws.setting("archive_daily_days"))
+    daily_dir = ws.daily_path(today).parent
+    archive_dir = daily_dir / "archive"
+    moved = []
+    for path in sorted(daily_dir.glob("*.md")):
+        if (d := _date(path.stem)) and d < cutoff:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            path.replace(archive_dir / path.name)
+            moved.append(path.name)
+    return moved
 
 
 def today(ws: Workspace, day: date) -> Today:
-    """The morning pass: ensure today's note exists, carry forward, sweep loops."""
-    result = Today(ws.daily_path(day), created=False, swept=sweep(ws, day))
+    """The morning pass: today's note, carry forward, sweep loops, archive old dailies."""
+    result = Today(ws.daily_path(day), created=False,
+                   swept=sweep(ws, day), archived=archive_dailies(ws, day))
     if result.path.is_file():
         return result
 

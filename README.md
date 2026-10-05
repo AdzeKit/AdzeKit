@@ -12,8 +12,8 @@ AI. Read [PHILOSOPHY.md](PHILOSOPHY.md) for why.
 
 ```bash
 uv tool install git+https://github.com/AdzeKit/AdzeKit
-adzekit init ~/shed --remote git@github.com:you/shed.git   # private repo
-adzekit sync
+adze init ~/shed --remote git@github.com:you/shed.git   # private repo
+adze sync
 ```
 
 On every other computer, run the same `init` command. An empty folder gets a
@@ -24,11 +24,11 @@ Cursor, Gemini CLI) and say "run daily start".
 
 | Command | Does |
 |---|---|
-| `adzekit init [PATH] [--remote URL] [--name NAME]` | Create, join, or refresh a shed. Safe to re-run. |
-| `adzekit today` | Create today's note, carry unfinished intentions forward, sweep ticked loops. |
-| `adzekit status` | One-screen health: loops open/overdue/stale, projects vs. cap. |
-| `adzekit review` | Write this week's review scaffold with the decisions to make. |
-| `adzekit sync` | Commit, rebase onto the remote, push. |
+| `adze init [PATH] [--remote URL] [--name NAME]` | Create, join, or refresh a shed. Safe to re-run. |
+| `adze today` | Create today's note, carry unfinished intentions forward, sweep ticked loops, archive dailies past the cutoff. |
+| `adze status` | One-screen health: loops open/overdue/stale, projects vs. cap. |
+| `adze review` | Write this week's review scaffold with the decisions to make. |
+| `adze sync` | Commit, rebase onto the remote, push. |
 
 Inside a shed, a command acts on that shed. Anywhere else, it acts on every shed
 registered on this machine; `-w NAME` picks one. Everything else (adding a loop,
@@ -77,10 +77,10 @@ owns customer work, and you own the rest of your life. Keep a shed for each, wit
 the same format, the same skills habit, and the same CLI:
 
 ```bash
-adzekit init ~/sheds/life --name life --remote git@github.com:you/life.git
-adzekit init ~/sheds/work --name work --remote <your employer's approved git host>
-adzekit status        # both sheds
-adzekit -w work sync  # just one
+adze init ~/sheds/life --name life --remote git@github.com:you/life.git
+adze init ~/sheds/work --name work --remote <your employer's approved git host>
+adze status        # both sheds
+adze -w work sync  # just one
 ```
 
 Each shed's name is stored in its `.adzekit` file, so it travels to every device.
@@ -101,7 +101,7 @@ Your shed has to reach three kinds of client:
 | Cloud agents | Claude Code on the web, Codex cloud | the hosted repository |
 
 Git is the one channel all three understand, so a private git remote is the
-hub. `adzekit sync` is built so it can run unattended:
+hub. `adze sync` is built so it can run unattended:
 
 - **Concurrent edits merge.** Record folders (`daily/`, `loops/`, `projects/`,
   `knowledge/`, `reviews/`) use git's `union` merge. When your phone and your
@@ -114,7 +114,7 @@ hub. `adzekit sync` is built so it can run unattended:
 - **Only `origin` is pushed to.** Rename a remote (for example to
   `parked`) and that shed syncs locally until you add an `origin` again.
 - **Agents sync themselves.** `AGENTS.md` tells every agent to run
-  `adzekit sync` before starting and after finishing. On your phone, turn on
+  `adze sync` before starting and after finishing. On your phone, turn on
   the Git plugin's auto pull and push.
 
 Cloud agents usually work on a branch and open a pull request instead of

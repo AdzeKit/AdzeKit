@@ -121,6 +121,22 @@ def test_today_carries_forward_and_sweeps(ws):
     assert not again.created and again.swept == []
 
 
+def test_today_archives_old_dailies(ws):
+    (ws.root / ".adzekit").write_text("archive_daily_days = 30\n")
+    (ws.root / "daily").mkdir(exist_ok=True)
+    old = ws.daily_path(date(2026, 7, 1))       # 89 days before MON → archived
+    boundary = ws.daily_path(date(2026, 8, 29))  # exactly 30 days before → kept
+    old.write_text("# old\n")
+    boundary.write_text("# boundary\n")
+
+    result = records.today(ws, MON)
+    assert result.archived == ["2026-07-01.md"]
+    assert not old.exists()
+    assert (ws.root / "daily/archive/2026-07-01.md").read_text() == "# old\n"
+    assert boundary.exists()  # on the cutoff stays put
+    assert result.path.exists()  # today's own note is never archived
+
+
 def test_review_gathers_the_week(ws):
     (ws.root / ".adzekit").write_text("stale_loop_days = 3\n")
     (ws.root / "daily").mkdir(exist_ok=True)

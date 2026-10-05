@@ -40,7 +40,7 @@ def _first_line(result: subprocess.CompletedProcess[str]) -> str:
 def sync(ws: Workspace, message: str | None = None) -> list[str]:
     """Commit local changes, rebase onto the remote, push. Returns what happened."""
     if _git(ws, "rev-parse", "--is-inside-work-tree").returncode != 0:
-        raise WorkspaceError(f"{ws.root} is not a git repository. Run `adzekit init {ws.root}`.")
+        raise WorkspaceError(f"{ws.root} is not a git repository. Run `adze init {ws.root}`.")
     if op := _in_progress(ws):
         raise WorkspaceError(f"A git {op} is already in progress in {ws.root}. "
                              f"Finish it or run `git {op} --abort`, then sync again.")

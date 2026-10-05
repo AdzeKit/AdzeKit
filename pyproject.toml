@@ -14,7 +14,7 @@ dev = [
 ]
 
 [project.scripts]
-adzekit = "adzekit.cli:main"
+adze = "adzekit.cli:main"
 
 [build-system]
 requires = ["hatchling"]
