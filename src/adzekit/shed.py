@@ -211,9 +211,9 @@ content between sheds unless they ask.
   `- [ ] (S) [YYYY-MM-DD] What I owe, to whom (YYYY-MM-DD)`. The first date is
   when it opened; the trailing one is optional and means due. Tick with `[x]`.
 - `{LOOPS_ARCHIVE}` — ticked loops, moved here by `adzekit today`.
-- `{PROJECTS_DIR}/*.md` — active projects, at most {s("max_active_projects")}. Parked
-  work goes in `{PROJECTS_DIR}/backlog/`, finished work in `{PROJECTS_DIR}/archive/`
-  (move the file). Each has `## Context` and a `## Log` of dated entries, newest first.
+- `{PROJECTS_DIR}/*.md` — active projects, at most {s("max_active_projects")}. There
+  is no backlog: finished or dropped work moves to `{PROJECTS_DIR}/archive/` (move the
+  file). Each has `## Context` and a `## Log` of dated entries, newest first.
 - `knowledge/*.md` — durable notes. Link with `[[note-name]]`; tag with `#kebab-case`.
 - `{REVIEWS_DIR}/YYYY-Www.md` — weekly reviews and other reports.
 
@@ -291,9 +291,9 @@ SKILLS = {
 
 1. Run `adzekit review` to write this week's `{REVIEWS_DIR}/YYYY-Www.md`.
 2. Walk me through each **Decide** item, one at a time. Loops: act, schedule,
-   or drop. Projects: continue, backlog, or archive (move the file). Apply each
-   answer as I give it.
-3. If active projects exceed the cap, ask me what to park.
+   or drop. Projects: continue or archive (move the file) — there is no backlog,
+   so a project is either alive this week or filed. Apply each answer as I give it.
+3. If active projects exceed the cap, ask me which to archive.
 4. Draft up to three **Next week** checkboxes and let me edit them.
 5. Ask me one reflection question; record the answer under `## Reflection`.
 """,

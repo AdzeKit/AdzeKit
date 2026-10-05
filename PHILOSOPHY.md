@@ -25,44 +25,32 @@ its keep. It merges concurrent edits to records instead of stopping, and it neve
 
 The record formats aren't arbitrary. Each encodes a habit worth keeping:
 
-- **Write the day down** — a daily note with at most five intentions. What's on
-  the page isn't in your head.
-- **Close every loop** — each commitment is one line in `loops/active.md` until
-  it's done, rescheduled, or dropped on purpose.
-- **Cap work in progress** — only a few projects are active; new work pushes
-  something out, as a deliberate trade-off.
-- **Review, don't accumulate** — weekly, every stale loop and quiet project gets
-  a decision, so nothing rots into guilt.
-- **Keep what lasts** — durable ideas become `[[linked]]` knowledge notes that
-  outlive the project that produced them.
+- **Write the day down** — a daily note with at most five intentions. What's on the page isn't in your head.
+- **Close every loop** — each commitment is one line in `loops/active.md` until it's done, rescheduled, or dropped on purpose.
+- **Cap work in progress** — only a few projects are active; new work pushes something out, as a deliberate trade-off.
+- **Review, don't accumulate** — weekly, every stale loop and quiet project gets a decision, so nothing rots into guilt.
+- **Keep what lasts** — durable ideas become `[[linked]]` knowledge notes that outlive the project that produced them.
 
-They work on paper. The shed just makes them cheap, and lets an agent keep them
-with you.
+They work on paper. The shed just makes them cheap, and lets an agent keep them with you.
+
+## No backlog
+
+A backlog looks like diligence and works like debt. Agile and Kanban made it the default home for every idea no one will act on now, and the result is a list that only grows — each line a standing reminder of work undone. That isn't neutral storage. Every open item you can see competes for attention and keeps nagging until it's closed (the Zeigarnik effect), and a backlog is a pile of open loops with no cue to ever resurface them. It charges you the full cognitive cost of unfinished work and returns neither the relief of doing it nor the relief of letting it go.
+
+So a shed has no backlog. A project is alive this week or it's archived. The archive isn't a graveyard — the file and its full history are one `git mv` away if the work comes back — but nothing sits in limbo pretending to be active. The weekly review forces the honest binary: continue, or file it. Nothing accumulates, so nothing rots into guilt.
 
 ## Three rules for tools
 
-1. **Plain files are the source of truth.** No database, no hidden memory, no
-   mandatory schema. If AdzeKit vanished, the shed would still work in any
-   editor.
-2. **One set of instructions for every agent.** `AGENTS.md` describes the shed
-   once, generated from the same definitions the code parses, so the two can't
-   drift. Runtime files (`CLAUDE.md`, `GEMINI.md`) only import it. Skills
-   describe formats, not commands, so they outlive any runtime or CLI version.
-3. **Agents edit, git remembers.** Changes go straight into the files, kept
-   small and in the usual formats. The diff is the review; git is the undo.
+1. **Plain files are the source of truth.** No database, no hidden memory, no mandatory schema. If AdzeKit vanished, the shed would still work in any editor.
+2. **One set of instructions for every agent.** `AGENTS.md` describes the shed once, generated from the same definitions the code parses, so the two can't drift. Runtime files (`CLAUDE.md`, `GEMINI.md`) only import it. Skills describe formats, not commands, so they outlive any runtime or CLI version.
+3. **Agents edit, git remembers.** Changes go straight into the files, kept small and in the usual formats. The diff is the review; git is the undo.
 
 ## What AdzeKit is not
 
-It is not an agent runtime, an integration hub, a scheduler, or a knowledge
-graph. Earlier versions were all four (see the `legacy-v0` tag); each cost more
-attention to maintain than it saved. Integrations belong to your agent. The
-shed owns only the formats — records and skills — that agents read and write.
+It is not an agent runtime, an integration hub, a scheduler, or a knowledge graph. Earlier versions were all four (see the `legacy-v0` tag); each cost more attention to maintain than it saved. Integrations belong to your agent. The shed owns only the formats — records and skills — that agents read and write.
 
 ## Test for anything new
 
 1. **Does it still work if I edit the files by hand?** If not, it's too clever.
 2. **Does it reduce what I hold in my head?** If not, it's clutter.
-3. **Is it a recurring procedure?** Then it's a skill (Markdown steps), not a
-   feature. Code is only for what must be exact and repeatable: dates,
-   carry-forward, sweeping, health checks, sync. Everything that needs judgment
-   is a skill, where you or any agent can read and change it.
+3. **Is it a recurring procedure?** Then it's a skill (Markdown steps), not a feature. Code is only for what must be exact and repeatable: dates, carry-forward, sweeping, health checks, sync. Everything that needs judgment is a skill, where you or any agent can read and change it.

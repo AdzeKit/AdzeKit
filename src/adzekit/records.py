@@ -229,7 +229,7 @@ def build_review(ws: Workspace, day: date) -> str:
 
     h = health(ws, day)
     stale = [f"[ ] {lp.title} — open {lp.age(day)}d → act / schedule / drop" for lp in h.stale]
-    quiet = [f"[ ] {p.slug} — last dated {p.last_touched or 'never'} → continue / backlog / archive"
+    quiet = [f"[ ] {p.slug} — last dated {p.last_touched or 'never'} → continue / archive"
              for p in h.quiet]
     return (
         f"# Review {label} ({start:%b %d} – {end:%b %d})\n\n"

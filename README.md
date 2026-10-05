@@ -45,7 +45,7 @@ shed/
 ├── daily/2026-09-29.md  ## Intention · ## Log · ## Reflection
 ├── loops/active.md      - [ ] (S) [2026-09-29] What I owe, to whom (2026-10-01)
 ├── loops/archive.md     ticked loops, grouped by the day they were swept
-├── projects/*.md        active projects; backlog/ and archive/ for the rest
+├── projects/*.md        active projects; archive/ for finished or dropped work
 ├── knowledge/*.md       durable notes, [[linked]] and #tagged
 ├── reviews/             weekly reviews and reports
 └── skills/*.md          your repeatable procedures
